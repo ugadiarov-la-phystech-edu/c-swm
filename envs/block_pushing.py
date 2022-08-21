@@ -206,4 +206,4 @@ class BlockPushing(gym.Env):
 
         state_obs = (self.get_state(), self.render())
 
-        return state_obs, reward, done, None
+        return state_obs, reward, done, {"TimeLimit.truncated": False}
