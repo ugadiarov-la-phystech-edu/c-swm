@@ -188,7 +188,7 @@ for epoch in range(1, args.epochs + 1):
 
         if batch_idx % args.log_interval == 0:
             print(
-                'Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                'Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.8f}'.format(
                     epoch, batch_idx * len(data_batch[0]),
                     len(train_loader.dataset),
                     100. * batch_idx / len(train_loader),
@@ -197,7 +197,7 @@ for epoch in range(1, args.epochs + 1):
         step += 1
 
     avg_loss = train_loss / len(train_loader.dataset)
-    print('====> Epoch: {} Average loss: {:.6f}'.format(
+    print('====> Epoch: {} Average loss: {:.8f}'.format(
         epoch, avg_loss))
 
     if avg_loss < best_loss:

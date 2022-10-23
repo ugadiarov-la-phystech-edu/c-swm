@@ -27,3 +27,9 @@ register(
     max_episode_steps=10,
     kwargs={'render_type': 'cubes'},
 )
+
+register(
+    'PushSquares-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=75
+)
