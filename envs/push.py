@@ -248,7 +248,9 @@ class Push(gym.Env):
         if self.channels_first:
             im = im.transpose([2, 0, 1])
 
-        return im
+        im *= 255
+
+        return im.astype(dtype=np.uint8)
 
 
 if __name__ == "__main__":
@@ -298,7 +300,7 @@ if __name__ == "__main__":
             s, r, d, _ = env.step(a)
             episode_r += r
             env.print(f'. Reward: {episode_r}')
-            plt.imshow(env.render_squares())
+            plt.imshow(env.render_squares().transpose([1, 2, 0]))
             plt.show()
             if d or key == "r":
                 print("Done with {} points. Resetting!".format(episode_r))

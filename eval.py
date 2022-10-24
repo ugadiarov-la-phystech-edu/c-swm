@@ -24,6 +24,7 @@ parser.add_argument('--dataset', type=str,
                     help='Dataset string.')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='Disable CUDA training.')
+parser.add_argument('--pixel-scale', type=float, default=1., help='Normalize pixel values in observation.')
 
 args_eval = parser.parse_args()
 
@@ -88,8 +89,8 @@ with torch.no_grad():
         if observations[0].size(0) != args.batch_size:
             continue
 
-        obs = observations[0]
-        next_obs = observations[-1]
+        obs = observations[0] / args.pixel_scale
+        next_obs = observations[-1] / args.pixel_scale
 
         state = model.obj_encoder(model.obj_extractor(obs))
         next_state = model.obj_encoder(model.obj_extractor(next_obs))

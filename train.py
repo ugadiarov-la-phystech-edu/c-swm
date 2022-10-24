@@ -60,6 +60,7 @@ parser.add_argument('--name', type=str, default='none',
 parser.add_argument('--save-folder', type=str,
                     default='checkpoints',
                     help='Path to checkpoints.')
+parser.add_argument('--pixel-scale', type=float, default=1., help='Normalize pixel values in observation.')
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -158,11 +159,13 @@ for epoch in range(1, args.epochs + 1):
 
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = [tensor.to(device) for tensor in data_batch]
+        obs, action, next_obs = data_batch
+        obs /= args.pixel_scale
+        next_obs /= args.pixel_scale
         optimizer.zero_grad()
 
         if args.decoder:
             optimizer_dec.zero_grad()
-            obs, action, next_obs = data_batch
             objs = model.obj_extractor(obs)
             state = model.obj_encoder(objs)
 
@@ -177,7 +180,7 @@ for epoch in range(1, args.epochs + 1):
                 reduction='sum') / obs.size(0)
             loss += next_loss
         else:
-            loss = model.contrastive_loss(*data_batch)
+            loss = model.contrastive_loss(obs, action, next_obs)
 
         loss.backward()
         train_loss += loss.item()
