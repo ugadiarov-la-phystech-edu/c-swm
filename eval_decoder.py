@@ -108,7 +108,7 @@ with torch.no_grad():
         obs = observations[0] / args.pixel_scale
 
         state = model.obj_encoder(model.obj_extractor(obs))
-        reconstruction = torch.sigmoid(decoder(state))
+        reconstruction = decoder(state)
         images = torch.cat([obs, reconstruction], dim=2).permute(0, 3, 2, 1)
         images = images.reshape(-1, *images.size()[-2:]).permute(1, 0, 2).cpu().numpy() * 255
         images = images.astype(np.uint8)
