@@ -26,6 +26,7 @@ parser.add_argument('--dataset', type=str,
                     help='Dataset string.')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='Disable CUDA training.')
+parser.add_argument('--decoder-folder', type=str)
 parser.add_argument('--pixel-scale', type=float, default=1., help='Normalize pixel values in observation.')
 
 args_eval = parser.parse_args()
@@ -33,7 +34,7 @@ args_eval = parser.parse_args()
 
 meta_file = os.path.join(args_eval.save_folder, 'metadata.pkl')
 model_file = os.path.join(args_eval.save_folder, 'model.pt')
-decoder_file = os.path.join(args_eval.save_folder, 'decoder.pt')
+decoder_file = os.path.join(args_eval.save_folder, args_eval.decoder_folder, 'decoder.pt')
 
 args = pickle.load(open(meta_file, 'rb'))['args']
 

@@ -55,6 +55,7 @@ parser.add_argument('--name', type=str, default='none',
 parser.add_argument('--save-folder', type=str,
                     default='checkpoints',
                     help='Path to checkpoints.')
+parser.add_argument('--decoder-folder', type=str)
 parser.add_argument('--pixel-scale', type=float, default=1., help='Normalize pixel values in observation.')
 
 args = parser.parse_args()
@@ -80,7 +81,7 @@ if not os.path.exists(save_folder):
     os.makedirs(save_folder)
 meta_file = os.path.join(save_folder, 'metadata.pkl')
 model_file = os.path.join(save_folder, 'model.pt')
-decoder_file = os.path.join(save_folder, 'decoder.pt')
+decoder_file = os.path.join(save_folder, args.decoder_folder, 'decoder.pt')
 log_file = os.path.join(save_folder, 'log.txt')
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
