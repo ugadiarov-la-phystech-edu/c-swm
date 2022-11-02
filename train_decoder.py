@@ -159,8 +159,7 @@ for epoch in range(1, args.epochs + 1):
         state = model.obj_encoder(objs)
 
         rec = torch.sigmoid(decoder(state))
-        loss = F.binary_cross_entropy(
-            rec, obs, reduction='sum') / obs.size(0)
+        loss = F.mse_loss(rec, obs)
 
         loss.backward()
         train_loss += loss.item()
