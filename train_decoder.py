@@ -76,12 +76,14 @@ if args.cuda:
 
 exp_counter = 0
 save_folder = '{}/{}/'.format(args.save_folder, exp_name)
+decoder_folder = os.path.join(save_folder, args.decoder_folder)
 
-if not os.path.exists(save_folder):
-    os.makedirs(save_folder)
+if not os.path.exists(decoder_folder):
+    os.makedirs(decoder_folder)
+
 meta_file = os.path.join(save_folder, 'metadata.pkl')
 model_file = os.path.join(save_folder, 'model.pt')
-decoder_file = os.path.join(save_folder, args.decoder_folder, 'decoder.pt')
+decoder_file = os.path.join(decoder_folder, 'decoder.pt')
 log_file = os.path.join(save_folder, 'log.txt')
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
