@@ -110,6 +110,6 @@ with torch.no_grad():
         state = model.obj_encoder(model.obj_extractor(obs))
         reconstruction = decoder(state)
         images = torch.cat([obs, reconstruction], dim=3).permute(0, 2, 3, 1)
-        images = images.reshape(-1, images.size()[-2:]).cpu().numpy()
+        images = images.reshape(-1, *images.size()[-2:]).cpu().numpy()
         skimage.imsave('examples.jpg', images)
         break
