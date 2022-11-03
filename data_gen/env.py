@@ -82,6 +82,7 @@ if __name__ == '__main__':
         env._max_episode_steps = warmstart + 11
 
     replay_buffer = []
+    lengths = []
 
     for i in range(episode_count):
 
@@ -129,10 +130,14 @@ if __name__ == '__main__':
                 replay_buffer[i]['next_obs'].append(ob[1])
 
                 if done:
+                    lengths.append(len(replay_buffer[i]['action']))
                     break
 
         if i % 10 == 0:
-            print("iter "+str(i))
+            mean_length = 0
+            if len(lengths) > 0:
+                mean_length = sum(lengths) / len(lengths)
+            print(f"iter {i}, mean episode length: {mean_length}")
 
     env.close()
 
