@@ -33,3 +33,17 @@ register(
     entry_point='envs.push:Push',
     max_episode_steps=75
 )
+
+register(
+    'ShapesNoWallsTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'hard_walls': False},
+)
+
+register(
+    'ShapesNoWallsTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=10,
+    kwargs={'render_type': 'shapes', 'hard_walls': False},
+)

@@ -8,7 +8,7 @@ from gym import spaces
 from gym.utils import seeding
 
 import matplotlib as mpl
-mpl.use('Agg')
+# mpl.use('Agg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from PIL import Image
@@ -65,11 +65,12 @@ def render_cubes(positions, width):
 class BlockPushing(gym.Env):
     """Gym environment for block pushing task."""
 
-    def __init__(self, width=5, height=5, render_type='cubes', num_objects=5,
+    def __init__(self, width=5, height=5, render_type='shapes', num_objects=5, hard_walls=True,
                  seed=None):
         self.width = width
         self.height = height
         self.render_type = render_type
+        self.hard_walls = hard_walls
 
         self.num_objects = num_objects
         self.num_actions = 4 * self.num_objects  # Move NESW
@@ -82,6 +83,7 @@ class BlockPushing(gym.Env):
 
         # Initialize to pos outside of env for easier collision resolution.
         self.objects = [[-1, -1] for _ in range(self.num_objects)]
+        self.active_objects = [True] * self.num_objects
 
         # If True, then check for collisions and don't allow two
         #   objects to occupy the same position.
@@ -105,40 +107,52 @@ class BlockPushing(gym.Env):
         if self.render_type == 'grid':
             im = np.zeros((3, self.width, self.height))
             for idx, pos in enumerate(self.objects):
-                im[:, pos[0], pos[1]] = self.colors[idx][:3]
+                if self.active_objects[idx]:
+                    im[:, pos[0], pos[1]] = self.colors[idx][:3]
             return im
         elif self.render_type == 'circles':
             im = np.zeros((self.width*10, self.height*10, 3), dtype=np.float32)
             for idx, pos in enumerate(self.objects):
-                rr, cc = skimage.draw.circle(
-                    pos[0]*10 + 5, pos[1]*10 + 5, 5, im.shape)
-                im[rr, cc, :] = self.colors[idx][:3]
+                if self.active_objects[idx]:
+                    rr, cc = skimage.draw.circle(
+                        pos[0]*10 + 5, pos[1]*10 + 5, 5, im.shape)
+                    im[rr, cc, :] = self.colors[idx][:3]
             return im.transpose([2, 0, 1])
         elif self.render_type == 'shapes':
             im = np.zeros((self.width*10, self.height*10, 3), dtype=np.float32)
             for idx, pos in enumerate(self.objects):
-                if idx % 3 == 0:
-                    rr, cc = skimage.draw.circle(
-                        pos[0]*10 + 5, pos[1]*10 + 5, 5, im.shape)
-                    im[rr, cc, :] = self.colors[idx][:3]
-                elif idx % 3 == 1:
-                    rr, cc = triangle(
-                        pos[0]*10, pos[1]*10, 10, im.shape)
-                    im[rr, cc, :] = self.colors[idx][:3]
-                else:
+                if self.active_objects[idx]:
+                    if idx % 3 == 0:
+                        rr, cc = skimage.draw.circle(
+                            pos[0]*10 + 5, pos[1]*10 + 5, 5, im.shape)
+                        im[rr, cc, :] = self.colors[idx][:3]
+                    elif idx % 3 == 1:
+                        rr, cc = triangle(
+                            pos[0]*10, pos[1]*10, 10, im.shape)
+                        im[rr, cc, :] = self.colors[idx][:3]
+                    else:
+                        rr, cc = square(
+                            pos[0]*10, pos[1]*10, 10, im.shape)
+                        im[rr, cc, :] = self.colors[idx][:3]
+            return im.transpose([2, 0, 1])
+        elif self.render_type == 'squares':
+            im = np.zeros((self.width*10, self.height*10, 3), dtype=np.float32)
+            for idx, pos in enumerate(self.objects):
+                if self.active_objects[idx]:
                     rr, cc = square(
-                        pos[0]*10, pos[1]*10, 10, im.shape)
+                        pos[0] * 10, pos[1] * 10, 10, im.shape)
                     im[rr, cc, :] = self.colors[idx][:3]
             return im.transpose([2, 0, 1])
         elif self.render_type == 'cubes':
-            im = render_cubes(self.objects, self.width)
+            im = render_cubes([pos for obj_id, pos in enumerate(self.objects) if self.active_objects[obj_id]], self.width)
             return im.transpose([2, 0, 1])
 
     def get_state(self):
         im = np.zeros(
             (self.num_objects, self.width, self.height), dtype=np.int32)
         for idx, pos in enumerate(self.objects):
-            im[idx, pos[0], pos[1]] = 1
+            if self.active_objects[idx]:
+                im[idx, pos[0], pos[1]] = 1
         return im
 
     def reset(self):
@@ -149,7 +163,7 @@ class BlockPushing(gym.Env):
         for i in range(len(self.objects)):
 
             # Resample to ensure objects don't fall on same spot.
-            while not self.valid_pos(self.objects[i], i):
+            while not self.is_in_grid(self.objects[i], i) or self.has_collisions(self.objects[i], i):
                 self.objects[i] = [
                     np.random.choice(np.arange(self.width)),
                     np.random.choice(np.arange(self.height))
@@ -158,28 +172,32 @@ class BlockPushing(gym.Env):
         state_obs = (self.get_state(), self.render())
         return state_obs
 
-    def valid_pos(self, pos, obj_id):
-        """Check if position is valid."""
+    def is_in_grid(self, pos, obj_id):
+        """Check if position is in grid."""
         if pos[0] < 0 or pos[0] >= self.width:
             return False
         if pos[1] < 0 or pos[1] >= self.height:
             return False
 
+        return True
+
+    def has_collisions(self, pos, obj_id):
+        """Check collisions."""
         if self.collisions:
             for idx, obj_pos in enumerate(self.objects):
-                if idx == obj_id:
+                if not self.active_objects[idx] or idx == obj_id:
                     continue
 
                 if pos[0] == obj_pos[0] and pos[1] == obj_pos[1]:
-                    return False
+                    return True
 
-        return True
+        return False
 
     def valid_move(self, obj_id, offset):
         """Check if move is valid."""
         old_pos = self.objects[obj_id]
         new_pos = [p + o for p, o in zip(old_pos, offset)]
-        return self.valid_pos(new_pos, obj_id)
+        return not self.has_collisions(new_pos, obj_id)
 
     def translate(self, obj_id, offset):
         """"Translate object pixel.
@@ -188,10 +206,14 @@ class BlockPushing(gym.Env):
             obj_id: ID of object.
             offset: (x, y) tuple of offsets.
         """
-
-        if self.valid_move(obj_id, offset):
-            self.objects[obj_id][0] += offset[0]
-            self.objects[obj_id][1] += offset[1]
+        old_pos = self.objects[obj_id]
+        new_pos = [p + o for p, o in zip(old_pos, offset)]
+        if not self.has_collisions(new_pos, obj_id):
+            if self.is_in_grid(new_pos, obj_id):
+                self.objects[obj_id] = new_pos
+            elif not self.hard_walls:
+                self.active_objects[obj_id] = False
+                self.objects[obj_id] = [-1, -1]
 
     def step(self, action):
 
@@ -202,8 +224,11 @@ class BlockPushing(gym.Env):
 
         direction = action % 4
         obj = action // 4
-        self.translate(obj, directions[direction])
+
+        if self.active_objects[obj]:
+            self.translate(obj, directions[direction])
 
         state_obs = (self.get_state(), self.render())
+        done = sum(self.active_objects) == 0
 
         return state_obs, reward, done, {"TimeLimit.truncated": False}

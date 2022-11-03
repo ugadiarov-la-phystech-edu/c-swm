@@ -161,8 +161,8 @@ for epoch in range(1, args.epochs + 1):
         objs = model.obj_extractor(obs)
         state = model.obj_encoder(objs)
 
-        rec = decoder(state)
-        loss = F.mse_loss(rec, obs)
+        rec = torch.sigmoid(decoder(state))
+        loss = F.binary_cross_entropy(rec, obs)
 
         loss.backward()
         train_loss += loss.item()
