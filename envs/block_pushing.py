@@ -8,7 +8,7 @@ from gym import spaces
 from gym.utils import seeding
 
 import matplotlib as mpl
-# mpl.use('Agg')
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from PIL import Image
@@ -82,8 +82,8 @@ class BlockPushing(gym.Env):
         self.target = None
 
         # Initialize to pos outside of env for easier collision resolution.
-        self.objects = [[-1, -1] for _ in range(self.num_objects)]
-        self.active_objects = [True] * self.num_objects
+        self.objects = None
+        self.active_objects = None
 
         # If True, then check for collisions and don't allow two
         #   objects to occupy the same position.
@@ -158,6 +158,7 @@ class BlockPushing(gym.Env):
     def reset(self):
 
         self.objects = [[-1, -1] for _ in range(self.num_objects)]
+        self.active_objects = [True] * self.num_objects
 
         # Randomize object position.
         for i in range(len(self.objects)):
