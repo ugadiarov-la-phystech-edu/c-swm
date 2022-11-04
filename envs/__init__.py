@@ -52,12 +52,12 @@ register(
     'WeightedShapesTrain-v0',
     entry_point='envs.weighted_block_pushing_rl:BlockPushingRL',
     max_episode_steps=100,
-    kwargs={'render_type': 'shapes', 'observation_full_state': True},
+    kwargs={'render_type': 'shapes', 'observation_full_state': True, 'channels_first': True},
 )
 
 register(
     'WeightedShapesEval-v0',
     entry_point='envs.weighted_block_pushing_rl:BlockPushingRL',
     max_episode_steps=10,
-    kwargs={'render_type': 'shapes', 'observation_full_state': True},
+    kwargs={'render_type': 'shapes', 'observation_full_state': True, 'channels_first': True},
 )

@@ -135,7 +135,7 @@ class BlockPushingRL(gym.Env):
 
     def __init__(self, width=10, height=10, render_type='cubes',
                  *, num_objects=3, scale=5, mode='Train', cmap='Set1', typ='Observed',
-                 num_weights=None, seed=None, observation_full_state=False):
+                 num_weights=None, seed=None, observation_full_state=False, channels_first=False):
         self.observation_full_state = observation_full_state
         self.width = width
         self.height = height
@@ -145,6 +145,7 @@ class BlockPushingRL(gym.Env):
         self.typ = typ
         self.scale = scale
         self.new_colors = None
+        self.channels_first = channels_first
 
         if typ in ['Unobserved', 'FixedUnobserved'] and "FewShot" in mode:
             self.n_f = int(mode[-1])
@@ -173,11 +174,11 @@ class BlockPushingRL(gym.Env):
         self.collisions = True
 
         self.action_space = spaces.Discrete(self.num_actions)
-        self.observation_space = spaces.Box(
-            low=0, high=255,
-            shape=(self.width * self.scale, self.height * self.scale, 6),
-            dtype=np.uint8
-        )
+
+        observation_shape = (self.width * self.scale, self.height * self.scale, 6)
+        if self.channels_first:
+            observation_shape = (observation_shape[2], *observation_shape[:2])
+        self.observation_space = spaces.Box(low=0, high=255, shape=observation_shape, dtype=np.uint8)
 
         self.seed(seed)
         self.reset()
@@ -258,7 +259,11 @@ class BlockPushingRL(gym.Env):
 
         objects_image = render(self.objects)
         target_image = render(self.target_objects)
-        return np.concatenate([objects_image, target_image], axis=-1)
+        image = np.concatenate([objects_image, target_image], axis=-1)
+        if self.channels_first:
+            image = image.transpose([2, 0, 1])
+
+        return image
 
     def get_state(self):
         im = np.zeros(
