@@ -61,7 +61,7 @@ class Push(gym.Env):
             )
             # channels are n_goals, n_boxes, n_obstacles, time remaining
         elif self.observation_type == 'squares':
-            self.observation_space = spaces.Box(0, 1, (self.w * self.render_scale, self.w * self.render_scale, 3))
+            self.observation_space = spaces.Box(0, 255, (self.w * self.render_scale, self.w * self.render_scale, 3), dtype=np.uint8)
         else:
             raise ValueError(f'Invalid observation_type: {self.observation_type}.')
 

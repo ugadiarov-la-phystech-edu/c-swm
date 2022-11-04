@@ -42,8 +42,22 @@ register(
 )
 
 register(
-    'ShapesNoWallsTrain-v0',
+    'ShapesNoWallsEval-v0',
     entry_point='envs.block_pushing:BlockPushing',
     max_episode_steps=10,
     kwargs={'render_type': 'shapes', 'hard_walls': False},
+)
+
+register(
+    'WeightedShapesTrain-v0',
+    entry_point='envs.weighted_block_pushing_rl:BlockPushingRL',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'observation_full_state': True},
+)
+
+register(
+    'WeightedShapesEval-v0',
+    entry_point='envs.weighted_block_pushing_rl:BlockPushingRL',
+    max_episode_steps=10,
+    kwargs={'render_type': 'shapes', 'observation_full_state': True},
 )
