@@ -28,7 +28,6 @@ register(
     kwargs={'render_type': 'cubes'},
 )
 
-
 register(
     'PushShapesHardWallsNoGoalsTrain-v0',
     entry_point='envs.push:Push',
@@ -43,7 +42,6 @@ register(
     kwargs={'observation_type': 'shapes', 'hard_walls': True, 'n_boxes': 5, 'n_goals': 0},
 )
 
-
 register(
     'PushShapesNoGoalsTrain-v0',
     entry_point='envs.push:Push',
@@ -56,6 +54,20 @@ register(
     entry_point='envs.push:Push',
     max_episode_steps=75,
     kwargs={'observation_type': 'shapes', 'hard_walls': False, 'n_boxes': 5, 'n_goals': 0},
+)
+
+register(
+    'PushShapesHardWallsNoGoalsStaticBoxesTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=75,
+    kwargs={'observation_type': 'shapes', 'hard_walls': True, 'n_boxes': 5, 'n_goals': 0, 'n_static_boxes': 1},
+)
+
+register(
+    'PushShapesHardWallsNoGoalsStaticBoxesEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=75,
+    kwargs={'observation_type': 'shapes', 'hard_walls': True, 'n_boxes': 5, 'n_goals': 0, 'n_static_boxes': 1},
 )
 
 register(

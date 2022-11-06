@@ -75,10 +75,11 @@ def scalene_triangle(r0, c0, width, im_size):
 
 
 class Push(gym.Env):
-    def __init__(self, mode='default', n_boxes=4, n_goals=2, observation_type='squares', max_episode_steps=75, hard_walls=False, seed=None):
+    def __init__(self, mode='default', n_boxes=4, n_static_boxes=0, n_goals=2, observation_type='squares', max_episode_steps=75, hard_walls=False, seed=None):
         self.w = 10
         self.step_limit = max_episode_steps
         self.n_boxes = n_boxes
+        self.n_static_boxes = n_static_boxes
         self.n_obstacles = 0
         self.n_goals = n_goals
         self.box_block = True
@@ -101,7 +102,7 @@ class Push(gym.Env):
         self.np_random = None
         self.channels_first = True
 
-        self.action_space = spaces.Discrete(4 * self.n_boxes)
+        self.action_space = spaces.Discrete(4 * (self.n_boxes - self.n_static_boxes))
         if self.observation_type == 'grid':
             self.observation_space = spaces.Box(
                 0,
