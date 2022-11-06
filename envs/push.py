@@ -346,6 +346,9 @@ class Push(gym.Env):
 
             im[rr, cc, :] = self.colors[idx][:3]
 
+        if self.channels_first:
+            im = im.transpose([2, 0, 1])
+
         im *= 255
         return im.astype(np.uint8)
 
