@@ -27,12 +27,12 @@ def square(r0, c0, width, im_size):
 
 
 class Push(gym.Env):
-    def __init__(self, mode='default', observation_type='squares', seed=None):
+    def __init__(self, mode='default', n_boxes=4, n_goals=2, observation_type='squares', max_episode_steps=75, seed=None):
         self.w = 10
-        self.step_limit = 75
-        self.n_boxes = 4
+        self.step_limit = max_episode_steps
+        self.n_boxes = n_boxes
         self.n_obstacles = 0
-        self.n_goals = 2
+        self.n_goals = n_goals
         self.box_block = True
         self.walls = False
         self.soft_obstacles = True
