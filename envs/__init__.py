@@ -30,17 +30,32 @@ register(
 
 
 register(
-    'PushSquaresTrain-v0',
+    'PushShapesHardWallsNoGoalsTrain-v0',
     entry_point='envs.push:Push',
     max_episode_steps=75,
-    kwargs={'observation_type': 'shapes', 'n_boxes': 4, 'n_goals': 1},
+    kwargs={'observation_type': 'shapes', 'hard_walls': True, 'n_boxes': 5, 'n_goals': 0},
 )
 
 register(
-    'PushSquaresEval-v0',
+    'PushShapesHardWallsNoGoalsEval-v0',
     entry_point='envs.push:Push',
     max_episode_steps=75,
-    kwargs={'observation_type': 'shapes', 'n_boxes': 4, 'n_goals': 1},
+    kwargs={'observation_type': 'shapes', 'hard_walls': True, 'n_boxes': 5, 'n_goals': 0},
+)
+
+
+register(
+    'PushShapesNoGoalsTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=75,
+    kwargs={'observation_type': 'shapes', 'hard_walls': False, 'n_boxes': 5, 'n_goals': 0},
+)
+
+register(
+    'PushShapesNoGoalsEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=75,
+    kwargs={'observation_type': 'shapes', 'hard_walls': False, 'n_boxes': 5, 'n_goals': 0},
 )
 
 register(
