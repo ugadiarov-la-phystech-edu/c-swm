@@ -33,14 +33,14 @@ register(
     'PushSquaresTrain-v0',
     entry_point='envs.push:Push',
     max_episode_steps=75,
-    kwargs={'observation_type': 'squares', 'n_boxes': 4, 'n_goals': 1},
+    kwargs={'observation_type': 'shapes', 'n_boxes': 4, 'n_goals': 1},
 )
 
 register(
     'PushSquaresEval-v0',
     entry_point='envs.push:Push',
     max_episode_steps=75,
-    kwargs={'observation_type': 'squares', 'n_boxes': 4, 'n_goals': 1},
+    kwargs={'observation_type': 'shapes', 'n_boxes': 4, 'n_goals': 1},
 )
 
 register(

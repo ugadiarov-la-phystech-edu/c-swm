@@ -9,6 +9,8 @@ import copy
 
 from matplotlib import pyplot as plt
 
+import utils
+
 
 def get_colors(cmap='Set1', num_colors=9):
     """Get color array from matplotlib colormap."""
@@ -21,8 +23,54 @@ def get_colors(cmap='Set1', num_colors=9):
     return colors
 
 
+def diamond(r0, c0, width, im_size):
+    rr, cc = [r0, r0 + width // 2, r0 + width, r0 + width // 2], [c0 + width // 2, c0, c0 + width // 2, c0 + width]
+    return skimage.draw.polygon(rr, cc, im_size)
+
 def square(r0, c0, width, im_size):
-    rr, cc = [r0, r0 + width - 1, r0 + width - 1, r0], [c0, c0, c0 + width - 1, c0 + width - 1]
+    rr, cc = [r0, r0 + width, r0 + width, r0], [c0, c0, c0 + width, c0 + width]
+    return skimage.draw.polygon(rr, cc, im_size)
+
+def triangle(r0, c0, width, im_size):
+    rr = np.asarray([r0 + 4] * 5 + [r0 + 3] * 3 + [r0 + 2] * 3 + [r0 + 1] + [r0], dtype=np.int32)
+    cc = np.asarray(list(range(c0, c0 + 5)) + list(range(c0 + 1, c0 + 4)) * 2 + [c0 + 2] * 2, dtype=np.int32)
+    # rr, cc = [r0, r0 + width - 1, r0 + width - 1], [c0 + width // 2, c0, c0 + width - 1]
+    # return skimage.draw.polygon(rr, cc, im_size)
+    return rr, cc
+
+def circle(r0, c0, width, im_size):
+    rr = np.asarray([r0] + [r0 + 1] * 3 + [r0 + 2] * 5 + [r0 + 3] * 3 + [r0 + 4], dtype=np.int32)
+    cc = np.asarray([c0 + 2] + list(range(c0 + 1, c0 + 4)) + list(range(c0, c0 + 5)) + list(range(c0 + 1, c0 + 4)) + [c0 + 2], dtype=np.int32)
+    # rr, cc = [r0, r0 + width - 1, r0 + width - 1], [c0 + width // 2, c0, c0 + width - 1]
+    # return skimage.draw.polygon(rr, cc, im_size)
+    return rr, cc
+
+def cross(r0, c0, width, im_size):
+    diff1 = width // 3 + 1
+    diff2 = 2 * width // 3
+    rr = [r0 + diff1, r0 + diff2, r0 + diff2, r0 + width, r0 + width,
+            r0 + diff2, r0 + diff2, r0 + diff1, r0 + diff1, r0, r0, r0 + diff1]
+    cc = [c0, c0, c0 + diff1, c0 + diff1, c0 + diff2, c0 + diff2, c0 + width,
+            c0 + width, c0 + diff2, c0 + diff2, c0 + diff1, c0 + diff1]
+    return skimage.draw.polygon(rr, cc, im_size)
+
+def pentagon(r0, c0, width, im_size):
+    diff1 = width // 3 - 1
+    diff2 = 2 * width // 3 + 1
+    rr = [r0 + width // 2, r0 + width, r0 + width, r0 + width // 2, r0]
+    cc = [c0, c0 + diff1, c0 + diff2, c0 + width, c0 + width // 2]
+    return skimage.draw.polygon(rr, cc, im_size)
+
+def parallelogram(r0, c0, width, im_size):
+    rr = np.asarray([r0] * 2 + [r0 + 1] * 3 + [r0 + 2] * 3 + [r0 + 3] * 3 + [r0 + 4] * 2, dtype=np.int32)
+    cc = np.asarray([c0, c0 + 1] + list(range(c0, c0 + 3)) + list(range(c0 + 1, c0 + 4)) + list(range(c0 + 2, c0 + 5)) + list(range(c0 + 3, c0 + 5)), dtype=np.int32)
+    # rr, cc = [r0, r0 + width, r0 + width, r0], [c0, c0 + width // 2, c0 + width, c0 + width - width // 2]
+    # return skimage.draw.polygon(rr, cc, im_size)
+    return rr, cc
+
+
+def scalene_triangle(r0, c0, width, im_size):
+    rr, cc = [r0, r0 + width, r0 + width//2], [c0 + width - width // 2, c0, c0 + width]
     return skimage.draw.polygon(rr, cc, im_size)
 
 
@@ -37,7 +85,7 @@ class Push(gym.Env):
         self.walls = False
         self.soft_obstacles = True
         self.render_scale = 5
-        self.colors = get_colors(num_colors=max(9, self.n_boxes))
+        self.colors = utils.get_colors(num_colors=max(9, self.n_boxes + self.n_goals))
         self.observation_type = observation_type
 
         self.use_obst = self.n_obstacles > 0 or self.walls
@@ -60,7 +108,7 @@ class Push(gym.Env):
                 (self.w, self.w, self.n_goals + self.n_boxes + self.n_obstacles)
             )
             # channels are n_goals, n_boxes, n_obstacles, time remaining
-        elif self.observation_type == 'squares':
+        elif self.observation_type in ('squares', 'shapes'):
             self.observation_space = spaces.Box(0, 255, (3, self.w * self.render_scale, self.w * self.render_scale), dtype=np.uint8)
         else:
             raise ValueError(f'Invalid observation_type: {self.observation_type}.')
@@ -80,7 +128,14 @@ class Push(gym.Env):
         return [seed]
 
     def _get_observation(self):
-        return self.state, self.render_squares()
+        if self.observation_type == 'squares':
+            image = self.render_squares()
+        elif self.observation_type == 'shapes':
+            image = self.render_shapes()
+        else:
+            assert False, f'Invalid observation type: {self.observation_type}.'
+
+        return self.state, image
 
     def reset(self):
         state = np.zeros([self.w, self.w, self.n_goals + self.n_boxes + self.n_obstacles + 1])
@@ -252,6 +307,46 @@ class Push(gym.Env):
 
         return im.astype(dtype=np.uint8)
 
+    def render_shapes(self,):
+        im = np.zeros((self.w * self.render_scale, self.w * self.render_scale, 3), dtype=np.float32)
+        for idx, pos in enumerate(np.concatenate([self.box_pos, self.goal_pos], axis=0)):
+            if pos[0] == -1:
+                assert pos[1] == -1
+                continue
+
+            shape_id = idx % 8
+            if shape_id == 0:
+                # radius = self.render_scale // 2
+                # rr, cc = skimage.draw.circle(
+                #     pos[0] * self.render_scale + radius, pos[1] * self.render_scale + radius, radius, im.shape)
+                rr, cc = circle(pos[0] * self.render_scale, pos[1] * self.render_scale, self.render_scale, im.shape)
+            elif shape_id == 1:
+                rr, cc = triangle(
+                    pos[0] * self.render_scale, pos[1] * self.render_scale, self.render_scale, im.shape)
+            elif shape_id == 2:
+                rr, cc = square(
+                    pos[0] * self.render_scale, pos[1] * self.render_scale, self.render_scale, im.shape)
+            elif shape_id == 3:
+                rr, cc = parallelogram(
+                    pos[0] * self.render_scale, pos[1] * self.render_scale, self.render_scale, im.shape)
+            elif shape_id == 4:
+                rr, cc = cross(
+                    pos[0] * self.render_scale, pos[1] * self.render_scale, self.render_scale, im.shape)
+            elif shape_id == 5:
+                rr, cc = diamond(
+                    pos[0] * self.render_scale, pos[1] * self.render_scale, self.render_scale, im.shape)
+            elif shape_id == 6:
+                rr, cc = pentagon(
+                    pos[0] * self.render_scale, pos[1] * self.render_scale, self.render_scale, im.shape)
+            else:
+                rr, cc = scalene_triangle(
+                    pos[0] * self.render_scale, pos[1] * self.render_scale, self.render_scale, im.shape)
+
+            im[rr, cc, :] = self.colors[idx][:3]
+
+        im *= 255
+        return im.astype(np.uint8)
+
 
 if __name__ == "__main__":
     """
@@ -265,15 +360,21 @@ if __name__ == "__main__":
         n_episodes = 1000
         for i in range(n_episodes):
             s = env.reset()
+            plt.imshow(s[1])
+            plt.show()
             done = False
             episode_r =0
             while not done:
-                s, r, done, _ = env.step(np.random.randint(4))
+                s, r, done, _ = env.step(np.random.randint(env.action_space.n))
                 episode_r += r
+                plt.imshow(s[1])
+                plt.show()
             all_r.append(episode_r)
         print(np.mean(all_r), np.std(all_r), np.std(all_r)/np.sqrt(n_episodes))
     else:
         s = env.reset()
+        plt.imshow(s[1])
+        plt.show()
         env.print()
         episode_r = 0
 
