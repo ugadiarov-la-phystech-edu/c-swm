@@ -75,7 +75,7 @@ def scalene_triangle(r0, c0, width, im_size):
 
 
 class Push(gym.Env):
-    def __init__(self, mode='default', n_boxes=4, n_goals=2, observation_type='squares', max_episode_steps=75, seed=None):
+    def __init__(self, mode='default', n_boxes=4, n_goals=2, observation_type='squares', max_episode_steps=75, hard_walls=False, seed=None):
         self.w = 10
         self.step_limit = max_episode_steps
         self.n_boxes = n_boxes
@@ -85,6 +85,7 @@ class Push(gym.Env):
         self.walls = False
         self.soft_obstacles = True
         self.render_scale = 5
+        self.hard_walls = hard_walls
         self.colors = utils.get_colors(num_colors=max(9, self.n_boxes + self.n_goals))
         self.observation_type = observation_type
 
@@ -212,11 +213,12 @@ class Push(gym.Env):
             # This box is out of the game. There is nothing to do.
             pass
         elif not self.is_in_grid(box_pos):
-            # push out of grid, destroy
-            self.state[old_box_pos[0], old_box_pos[1], box_channel] = 0
-            self.box_pos[box_id] = -1, -1
-            self.boxes_left -= 1
-            reward += -0.1
+            if not self.hard_walls:
+                # push out of grid, destroy
+                self.state[old_box_pos[0], old_box_pos[1], box_channel] = 0
+                self.box_pos[box_id] = -1, -1
+                self.boxes_left -= 1
+                reward += -0.1
         elif current_map[box_pos[0], box_pos[1], 1] == 1:
             # push into another box,
             if self.box_block:
