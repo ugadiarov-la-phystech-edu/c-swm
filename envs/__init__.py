@@ -85,6 +85,20 @@ register(
 )
 
 register(
+    'PushShapesTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=75,
+    kwargs={'observation_type': 'shapes', 'hard_walls': False, 'n_boxes': 4, 'n_goals': 1, 'n_static_boxes': 0},
+)
+
+register(
+    'PushShapesEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=75,
+    kwargs={'observation_type': 'shapes', 'hard_walls': False, 'n_boxes': 4, 'n_goals': 1, 'n_static_boxes': 0},
+)
+
+register(
     'ShapesNoWallsTrain-v0',
     entry_point='envs.block_pushing:BlockPushing',
     max_episode_steps=100,
