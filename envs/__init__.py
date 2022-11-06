@@ -66,12 +66,12 @@ register(
     'ShapesStaticTrain-v0',
     entry_point='envs.block_pushing:BlockPushing',
     max_episode_steps=100,
-    kwargs={'render_type': 'shapes', 'hard_walls': True, 'num_active_objects': 3},
+    kwargs={'render_type': 'shapes', 'hard_walls': True, 'num_movable_objects': 3},
 )
 
 register(
     'ShapesStaticEval-v0',
     entry_point='envs.block_pushing:BlockPushing',
     max_episode_steps=10,
-    kwargs={'render_type': 'shapes', 'hard_walls':  True, 'num_active_objects': 3},
+    kwargs={'render_type': 'shapes', 'hard_walls':  True, 'num_movable_objects': 3},
 )
