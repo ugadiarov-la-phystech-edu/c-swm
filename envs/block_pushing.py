@@ -27,6 +27,21 @@ def triangle(r0, c0, width, im_size):
     return skimage.draw.polygon(rr, cc, im_size)
 
 
+def parallelogram(r0, c0, width, im_size):
+    rr, cc = [r0, r0 + width, r0 + width, r0], [c0, c0 + width // 2, c0 + width, c0 + width - width // 2]
+    return skimage.draw.polygon(rr, cc, im_size)
+
+
+def cross(r0, c0, width, im_size):
+    diff1 = width // 3 + 1
+    diff2 = 2 * width // 3
+    rr = [r0 + diff1, r0 + diff2, r0 + diff2, r0 + width, r0 + width,
+            r0 + diff2, r0 + diff2, r0 + diff1, r0 + diff1, r0, r0, r0 + diff1]
+    cc = [c0, c0, c0 + diff1, c0 + diff1, c0 + diff2, c0 + diff2, c0 + width,
+            c0 + width, c0 + diff2, c0 + diff2, c0 + diff1, c0 + diff1]
+    return skimage.draw.polygon(rr, cc, im_size)
+
+
 def fig2rgb_array(fig):
     fig.canvas.draw()
     buffer = fig.canvas.tostring_rgb()
@@ -65,7 +80,7 @@ def render_cubes(positions, width):
 class BlockPushing(gym.Env):
     """Gym environment for block pushing task."""
 
-    def __init__(self, width=5, height=5, render_type='shapes', num_objects=5, num_movable_objects=5, hard_walls=True,
+    def __init__(self, width=5, height=5, render_type='shapes', num_objects=5, num_static_objects=0, num_goals=0, hard_walls=True,
                  seed=None):
         self.width = width
         self.height = height
@@ -73,8 +88,11 @@ class BlockPushing(gym.Env):
         self.hard_walls = hard_walls
 
         self.num_objects = num_objects
-        self.num_movable_objects = num_movable_objects
-        self.num_actions = 4 * self.num_movable_objects  # Move NESW
+        self.num_static_objects = num_static_objects
+        self.num_goals = num_goals
+        assert self.num_objects >= self.num_static_objects
+        assert self.num_static_objects >= self.num_goals
+        self.num_actions = 4 * (self.num_objects - self.num_static_objects)  # Move NESW
 
         self.colors = utils.get_colors(num_colors=max(9, self.num_objects))
 
@@ -122,19 +140,29 @@ class BlockPushing(gym.Env):
         elif self.render_type == 'shapes':
             im = np.zeros((self.width*10, self.height*10, 3), dtype=np.float32)
             for idx, pos in enumerate(self.objects):
+                shape_id = idx % 5
                 if self.active_objects[idx]:
-                    if idx % 3 == 0:
+                    if shape_id == 0:
                         rr, cc = skimage.draw.circle(
                             pos[0]*10 + 5, pos[1]*10 + 5, 5, im.shape)
                         im[rr, cc, :] = self.colors[idx][:3]
-                    elif idx % 3 == 1:
+                    elif shape_id == 1:
                         rr, cc = triangle(
                             pos[0]*10, pos[1]*10, 10, im.shape)
                         im[rr, cc, :] = self.colors[idx][:3]
-                    else:
+                    elif shape_id == 2:
                         rr, cc = square(
                             pos[0]*10, pos[1]*10, 10, im.shape)
                         im[rr, cc, :] = self.colors[idx][:3]
+                    elif shape_id == 3:
+                        rr, cc = parallelogram(
+                            pos[0] * 10, pos[1] * 10, 10, im.shape)
+                        im[rr, cc, :] = self.colors[idx][:3]
+                    else:
+                        rr, cc = cross(
+                            pos[0] * 10, pos[1] * 10, 10, im.shape)
+                        im[rr, cc, :] = self.colors[idx][:3]
+
             return im.transpose([2, 0, 1])
         elif self.render_type == 'squares':
             im = np.zeros((self.width*10, self.height*10, 3), dtype=np.float32)
@@ -157,7 +185,6 @@ class BlockPushing(gym.Env):
         return im
 
     def reset(self):
-
         self.objects = [[-1, -1] for _ in range(self.num_objects)]
         self.active_objects = [True] * self.num_objects
 
@@ -165,7 +192,7 @@ class BlockPushing(gym.Env):
         for i in range(len(self.objects)):
 
             # Resample to ensure objects don't fall on same spot.
-            while not self.is_in_grid(self.objects[i], i) or self.has_collisions(self.objects[i], i):
+            while not self.is_in_grid(self.objects[i], i) or self.check_collisions(self.objects[i], i) is not None:
                 self.objects[i] = [
                     np.random.choice(np.arange(self.width)),
                     np.random.choice(np.arange(self.height))
@@ -183,7 +210,7 @@ class BlockPushing(gym.Env):
 
         return True
 
-    def has_collisions(self, pos, obj_id):
+    def check_collisions(self, pos, obj_id):
         """Check collisions."""
         if self.collisions:
             for idx, obj_pos in enumerate(self.objects):
@@ -191,15 +218,15 @@ class BlockPushing(gym.Env):
                     continue
 
                 if pos[0] == obj_pos[0] and pos[1] == obj_pos[1]:
-                    return True
+                    return idx
 
-        return False
+        return None
 
     def valid_move(self, obj_id, offset):
         """Check if move is valid."""
         old_pos = self.objects[obj_id]
         new_pos = [p + o for p, o in zip(old_pos, offset)]
-        return not self.has_collisions(new_pos, obj_id)
+        return self.check_collisions(new_pos, obj_id) is None
 
     def translate(self, obj_id, offset):
         """"Translate object pixel.
@@ -210,12 +237,16 @@ class BlockPushing(gym.Env):
         """
         old_pos = self.objects[obj_id]
         new_pos = [p + o for p, o in zip(old_pos, offset)]
-        if not self.has_collisions(new_pos, obj_id):
+        collision_obj_id = self.check_collisions(new_pos, obj_id)
+        if collision_obj_id is None:
             if self.is_in_grid(new_pos, obj_id):
                 self.objects[obj_id] = new_pos
             elif not self.hard_walls:
                 self.active_objects[obj_id] = False
                 self.objects[obj_id] = [-1, -1]
+        elif collision_obj_id >= self.num_objects - self.num_goals:
+            self.active_objects[obj_id] = False
+            self.objects[obj_id] = [-1, -1]
 
     def step(self, action):
 
@@ -231,6 +262,6 @@ class BlockPushing(gym.Env):
             self.translate(obj, directions[direction])
 
         state_obs = (self.get_state(), self.render())
-        done = sum(self.active_objects) == 0
+        done = sum(self.active_objects) <= self.num_static_objects
 
         return state_obs, reward, done, {"TimeLimit.truncated": False}

@@ -4,14 +4,70 @@ register(
     'ShapesTrain-v0',
     entry_point='envs.block_pushing:BlockPushing',
     max_episode_steps=100,
-    kwargs={'render_type': 'shapes'},
+    kwargs={'render_type': 'shapes', 'num_objects': 5, 'num_static_objects': 0, 'num_goals': 0, 'hard_walls': True},
 )
 
 register(
     'ShapesEval-v0',
     entry_point='envs.block_pushing:BlockPushing',
-    max_episode_steps=10,
-    kwargs={'render_type': 'shapes'},
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'num_objects': 5, 'num_static_objects': 0, 'num_goals': 0, 'hard_walls': True}
+)
+
+register(
+    'ShapesNoHardWallsTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'num_objects': 5, 'num_static_objects': 0, 'num_goals': 0, 'hard_walls': False}
+)
+
+register(
+    'ShapesNoHardWallsEval-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'num_objects': 5, 'num_static_objects': 0, 'num_goals': 0, 'hard_walls': False}
+)
+
+register(
+    'ShapesStaticObjectTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'num_objects': 5, 'num_static_objects': 1, 'num_goals': 0, 'hard_walls': True}
+)
+
+register(
+    'ShapesStaticObjectEval-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'num_objects': 5, 'num_static_objects': 1, 'num_goals': 0, 'hard_walls': True}
+)
+
+register(
+    'ShapesStaticGoalTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'num_objects': 5, 'num_static_objects': 1, 'num_goals': 1, 'hard_walls': True}
+)
+
+register(
+    'ShapesStaticGoalEval-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'num_objects': 5, 'num_static_objects': 1, 'num_goals': 1, 'hard_walls': True}
+)
+
+register(
+    'ShapesStaticGoalNoHardWallsTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'num_objects': 5, 'num_static_objects': 1, 'num_goals': 1, 'hard_walls': False}
+)
+
+register(
+    'ShapesStaticGoalNoHardWallsEval-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'num_objects': 5, 'num_static_objects': 1, 'num_goals': 1, 'hard_walls': False}
 )
 
 register(
@@ -124,18 +180,4 @@ register(
     entry_point='envs.weighted_block_pushing_rl:BlockPushingRL',
     max_episode_steps=10,
     kwargs={'render_type': 'shapes', 'observation_full_state': True, 'channels_first': True},
-)
-
-register(
-    'ShapesStaticTrain-v0',
-    entry_point='envs.block_pushing:BlockPushing',
-    max_episode_steps=100,
-    kwargs={'render_type': 'shapes', 'hard_walls': True, 'num_movable_objects': 3},
-)
-
-register(
-    'ShapesStaticEval-v0',
-    entry_point='envs.block_pushing:BlockPushing',
-    max_episode_steps=10,
-    kwargs={'render_type': 'shapes', 'hard_walls':  True, 'num_movable_objects': 3},
 )
