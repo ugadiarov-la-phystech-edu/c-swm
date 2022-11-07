@@ -112,7 +112,7 @@ class BlockPushing(gym.Env):
         self.observation_space = spaces.Box(
             low=0, high=1,
             shape=(3, self.width, self.height),
-            dtype=np.float32
+            dtype=np.uint8
         )
 
         self.seed(seed)
@@ -123,12 +123,12 @@ class BlockPushing(gym.Env):
         return [seed]
 
     def render(self):
+        im = None
         if self.render_type == 'grid':
             im = np.zeros((3, self.width, self.height))
             for idx, pos in enumerate(self.objects):
                 if self.active_objects[idx]:
                     im[:, pos[0], pos[1]] = self.colors[idx][:3]
-            return im
         elif self.render_type == 'circles':
             im = np.zeros((self.width*10, self.height*10, 3), dtype=np.float32)
             for idx, pos in enumerate(self.objects):
@@ -136,7 +136,6 @@ class BlockPushing(gym.Env):
                     rr, cc = skimage.draw.circle(
                         pos[0]*10 + 5, pos[1]*10 + 5, 5, im.shape)
                     im[rr, cc, :] = self.colors[idx][:3]
-            return im.transpose([2, 0, 1])
         elif self.render_type == 'shapes':
             im = np.zeros((self.width*10, self.height*10, 3), dtype=np.float32)
             for idx, pos in enumerate(self.objects):
@@ -162,8 +161,6 @@ class BlockPushing(gym.Env):
                         rr, cc = cross(
                             pos[0] * 10, pos[1] * 10, 10, im.shape)
                         im[rr, cc, :] = self.colors[idx][:3]
-
-            return im.transpose([2, 0, 1])
         elif self.render_type == 'squares':
             im = np.zeros((self.width*10, self.height*10, 3), dtype=np.float32)
             for idx, pos in enumerate(self.objects):
@@ -171,10 +168,14 @@ class BlockPushing(gym.Env):
                     rr, cc = square(
                         pos[0] * 10, pos[1] * 10, 10, im.shape)
                     im[rr, cc, :] = self.colors[idx][:3]
-            return im.transpose([2, 0, 1])
         elif self.render_type == 'cubes':
             im = render_cubes([pos for obj_id, pos in enumerate(self.objects) if self.active_objects[obj_id]], self.width)
-            return im.transpose([2, 0, 1])
+
+        if self.render_type != 'grid':
+            im = im.transpose([2, 0, 1])
+
+        im *= 255
+        return im.astype(np.uint8)
 
     def get_state(self):
         im = np.zeros(
