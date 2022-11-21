@@ -81,7 +81,7 @@ class BlockPushing(gym.Env):
     """Gym environment for block pushing task."""
 
     def __init__(self, width=5, height=5, render_type='shapes', num_objects=5, num_static_objects=0, num_goals=0, hard_walls=True,
-                 seed=None):
+                 seed=None, random_actions=False):
         self.width = width
         self.height = height
         self.render_type = render_type
@@ -107,6 +107,7 @@ class BlockPushing(gym.Env):
         # If True, then check for collisions and don't allow two
         #   objects to occupy the same position.
         self.collisions = True
+        self.random_actions = random_actions
 
         self.action_space = spaces.Discrete(self.num_actions)
         self.observation_space = spaces.Box(
@@ -255,6 +256,9 @@ class BlockPushing(gym.Env):
         reward = 0
 
         directions = [(-1, 0), (0, 1), (1, 0), (0, -1)]
+
+        if self.random_actions:
+            action = self.action_space.sample()
 
         direction = action % 4
         obj = action // 4

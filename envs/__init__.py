@@ -15,6 +15,20 @@ register(
 )
 
 register(
+    'ShapesRandomActionsTrain-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'num_objects': 5, 'num_static_objects': 0, 'num_goals': 0, 'hard_walls': True, 'random_actions': True},
+)
+
+register(
+    'ShapesRandomActionsEval-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'num_objects': 5, 'num_static_objects': 0, 'num_goals': 0, 'hard_walls': True, 'random_actions': True},
+)
+
+register(
     'ShapesNoHardWallsTrain-v0',
     entry_point='envs.block_pushing:BlockPushing',
     max_episode_steps=100,
