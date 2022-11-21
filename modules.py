@@ -18,8 +18,9 @@ class ContrastiveSWM(nn.Module):
     """
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim,
                  num_objects, hinge=1., sigma=0.5, encoder='large',
-                 ignore_action=False, copy_action=False):
+                 ignore_action=False, copy_action=False, shuffle_objects=False):
         super(ContrastiveSWM, self).__init__()
+        self.shuffle_objects = shuffle_objects
 
         self.hidden_dim = hidden_dim
         self.embedding_dim = embedding_dim
@@ -40,7 +41,9 @@ class ContrastiveSWM(nn.Module):
             self.obj_extractor = EncoderCNNSmall(
                 input_dim=num_channels,
                 hidden_dim=hidden_dim // 16,
-                num_objects=num_objects)
+                num_objects=num_objects,
+                shuffle_objects=self.shuffle_objects
+            )
             # CNN image size changes
             width_height = np.array(width_height)
             width_height = width_height // 10
@@ -48,7 +51,9 @@ class ContrastiveSWM(nn.Module):
             self.obj_extractor = EncoderCNNMedium(
                 input_dim=num_channels,
                 hidden_dim=hidden_dim // 16,
-                num_objects=num_objects)
+                num_objects=num_objects,
+                shuffle_objects=self.shuffle_objects
+            )
             # CNN image size changes
             width_height = np.array(width_height)
             width_height = width_height // 5
@@ -56,7 +61,9 @@ class ContrastiveSWM(nn.Module):
             self.obj_extractor = EncoderCNNLarge(
                 input_dim=num_channels,
                 hidden_dim=hidden_dim // 16,
-                num_objects=num_objects)
+                num_objects=num_objects,
+                shuffle_objects=self.shuffle_objects
+            )
 
         self.obj_encoder = EncoderMLP(
             input_dim=np.prod(width_height),
@@ -248,8 +255,9 @@ class EncoderCNNSmall(nn.Module):
     """CNN encoder, maps observation to obj-specific feature maps."""
     
     def __init__(self, input_dim, hidden_dim, num_objects, act_fn='sigmoid',
-                 act_fn_hid='relu'):
+                 act_fn_hid='relu', shuffle_objects=False):
         super(EncoderCNNSmall, self).__init__()
+        self.shuffle_objects = shuffle_objects
         self.cnn1 = nn.Conv2d(
             input_dim, hidden_dim, (10, 10), stride=10)
         self.cnn2 = nn.Conv2d(hidden_dim, num_objects, (1, 1), stride=1)
@@ -259,15 +267,21 @@ class EncoderCNNSmall(nn.Module):
 
     def forward(self, obs):
         h = self.act1(self.ln1(self.cnn1(obs)))
-        return self.act2(self.cnn2(h))
+        h = self.act2(self.cnn2(h))
+        if self.shuffle_objects:
+            idx = torch.randperm(h.size(1))
+            return h[:, idx]
+
+        return h
     
     
 class EncoderCNNMedium(nn.Module):
     """CNN encoder, maps observation to obj-specific feature maps."""
     
     def __init__(self, input_dim, hidden_dim, num_objects, act_fn='sigmoid',
-                 act_fn_hid='leaky_relu'):
+                 act_fn_hid='leaky_relu', shuffle_objects=False):
         super(EncoderCNNMedium, self).__init__()
+        self.shuffle_objects = shuffle_objects
 
         self.cnn1 = nn.Conv2d(
             input_dim, hidden_dim, (9, 9), padding=4)
@@ -281,6 +295,10 @@ class EncoderCNNMedium(nn.Module):
     def forward(self, obs):
         h = self.act1(self.ln1(self.cnn1(obs)))
         h = self.act2(self.cnn2(h))
+        if self.shuffle_objects:
+            idx = torch.randperm(h.size(1))
+            return h[:, idx]
+
         return h
 
 
@@ -288,8 +306,9 @@ class EncoderCNNLarge(nn.Module):
     """CNN encoder, maps observation to obj-specific feature maps."""
     
     def __init__(self, input_dim, hidden_dim, num_objects, act_fn='sigmoid',
-                 act_fn_hid='relu'):
+                 act_fn_hid='relu', shuffle_objects=False):
         super(EncoderCNNLarge, self).__init__()
+        self.shuffle_objects = shuffle_objects
 
         self.cnn1 = nn.Conv2d(input_dim, hidden_dim, (3, 3), padding=1)
         self.act1 = utils.get_act_fn(act_fn_hid)
@@ -310,7 +329,12 @@ class EncoderCNNLarge(nn.Module):
         h = self.act1(self.ln1(self.cnn1(obs)))
         h = self.act2(self.ln2(self.cnn2(h)))
         h = self.act3(self.ln3(self.cnn3(h)))
-        return self.act4(self.cnn4(h))
+        h = self.act4(self.cnn4(h))
+        if self.shuffle_objects:
+            idx = torch.randperm(h.size(1))
+            return h[:, idx]
+
+        return h
 
 
 class EncoderMLP(nn.Module):
