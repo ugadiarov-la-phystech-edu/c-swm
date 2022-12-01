@@ -3,7 +3,7 @@ import numpy as np
 import skimage
 from gym.utils import seeding
 from gym import spaces
-#from scipy.misc import imresize
+# from scipy.misc import imresize
 import sys
 import copy
 
@@ -25,32 +25,44 @@ def diamond(r0, c0, width, im_size):
     rr, cc = [r0, r0 + width // 2, r0 + width, r0 + width // 2], [c0 + width // 2, c0, c0 + width // 2, c0 + width]
     return skimage.draw.polygon(rr, cc, im_size)
 
+
 def square(r0, c0, width, im_size):
     rr, cc = [r0, r0 + width, r0 + width, r0], [c0, c0, c0 + width, c0 + width]
     return skimage.draw.polygon(rr, cc, im_size)
 
+
 def triangle(r0, c0, width, im_size):
-    rr = np.asarray([r0 + 4] * 5 + [r0 + 3] * 3 + [r0 + 2] * 3 + [r0 + 1] + [r0], dtype=np.int32)
-    cc = np.asarray(list(range(c0, c0 + 5)) + list(range(c0 + 1, c0 + 4)) * 2 + [c0 + 2] * 2, dtype=np.int32)
-    # rr, cc = [r0, r0 + width - 1, r0 + width - 1], [c0 + width // 2, c0, c0 + width - 1]
-    # return skimage.draw.polygon(rr, cc, im_size)
-    return rr, cc
+    if width == 5:
+        rr = np.asarray([r0 + 4] * 5 + [r0 + 3] * 3 + [r0 + 2] * 3 + [r0 + 1] + [r0], dtype=np.int32)
+        cc = np.asarray(list(range(c0, c0 + 5)) + list(range(c0 + 1, c0 + 4)) * 2 + [c0 + 2] * 2, dtype=np.int32)
+        return rr, cc
+
+    rr, cc = [r0, r0 + width - 1, r0 + width - 1], [c0 + width // 2, c0, c0 + width - 1]
+    return skimage.draw.polygon(rr, cc, im_size)
+
 
 def circle(r0, c0, width, im_size):
-    rr = np.asarray([r0] + [r0 + 1] * 3 + [r0 + 2] * 5 + [r0 + 3] * 3 + [r0 + 4], dtype=np.int32)
-    cc = np.asarray([c0 + 2] + list(range(c0 + 1, c0 + 4)) + list(range(c0, c0 + 5)) + list(range(c0 + 1, c0 + 4)) + [c0 + 2], dtype=np.int32)
-    # rr, cc = [r0, r0 + width - 1, r0 + width - 1], [c0 + width // 2, c0, c0 + width - 1]
-    # return skimage.draw.polygon(rr, cc, im_size)
-    return rr, cc
+    if width == 5:
+        rr = np.asarray([r0] + [r0 + 1] * 3 + [r0 + 2] * 5 + [r0 + 3] * 3 + [r0 + 4], dtype=np.int32)
+        cc = np.asarray(
+            [c0 + 2] + list(range(c0 + 1, c0 + 4)) + list(range(c0, c0 + 5)) + list(range(c0 + 1, c0 + 4)) + [c0 + 2],
+            dtype=np.int32)
+        return rr, cc
+
+    radius = width // 2
+    return skimage.draw.ellipse(
+        r0 + radius, c0 + radius, radius, radius)
+
 
 def cross(r0, c0, width, im_size):
     diff1 = width // 3 + 1
     diff2 = 2 * width // 3
     rr = [r0 + diff1, r0 + diff2, r0 + diff2, r0 + width, r0 + width,
-            r0 + diff2, r0 + diff2, r0 + diff1, r0 + diff1, r0, r0, r0 + diff1]
+          r0 + diff2, r0 + diff2, r0 + diff1, r0 + diff1, r0, r0, r0 + diff1]
     cc = [c0, c0, c0 + diff1, c0 + diff1, c0 + diff2, c0 + diff2, c0 + width,
-            c0 + width, c0 + diff2, c0 + diff2, c0 + diff1, c0 + diff1]
+          c0 + width, c0 + diff2, c0 + diff2, c0 + diff1, c0 + diff1]
     return skimage.draw.polygon(rr, cc, im_size)
+
 
 def pentagon(r0, c0, width, im_size):
     diff1 = width // 3 - 1
@@ -59,16 +71,21 @@ def pentagon(r0, c0, width, im_size):
     cc = [c0, c0 + diff1, c0 + diff2, c0 + width, c0 + width // 2]
     return skimage.draw.polygon(rr, cc, im_size)
 
+
 def parallelogram(r0, c0, width, im_size):
-    rr = np.asarray([r0] * 2 + [r0 + 1] * 3 + [r0 + 2] * 3 + [r0 + 3] * 3 + [r0 + 4] * 2, dtype=np.int32)
-    cc = np.asarray([c0, c0 + 1] + list(range(c0, c0 + 3)) + list(range(c0 + 1, c0 + 4)) + list(range(c0 + 2, c0 + 5)) + list(range(c0 + 3, c0 + 5)), dtype=np.int32)
-    # rr, cc = [r0, r0 + width, r0 + width, r0], [c0, c0 + width // 2, c0 + width, c0 + width - width // 2]
-    # return skimage.draw.polygon(rr, cc, im_size)
-    return rr, cc
+    if width == 5:
+        rr = np.asarray([r0] * 2 + [r0 + 1] * 3 + [r0 + 2] * 3 + [r0 + 3] * 3 + [r0 + 4] * 2, dtype=np.int32)
+        cc = np.asarray(
+            [c0, c0 + 1] + list(range(c0, c0 + 3)) + list(range(c0 + 1, c0 + 4)) + list(range(c0 + 2, c0 + 5)) + list(
+                range(c0 + 3, c0 + 5)), dtype=np.int32)
+        return rr, cc
+
+    rr, cc = [r0, r0 + width, r0 + width, r0], [c0, c0 + width // 2, c0 + width, c0 + width - width // 2]
+    return skimage.draw.polygon(rr, cc, im_size)
 
 
 def scalene_triangle(r0, c0, width, im_size):
-    rr, cc = [r0, r0 + width, r0 + width//2], [c0 + width - width // 2, c0, c0 + width]
+    rr, cc = [r0, r0 + width, r0 + width // 2], [c0 + width - width // 2, c0, c0 + width]
     return skimage.draw.polygon(rr, cc, im_size)
 
 
@@ -77,11 +94,13 @@ class Push(gym.Env):
     STATIC_BOX = 'static_box'
     BOX = 'box'
 
-    def __init__(self, mode='default', n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, width=10, return_state=True,
-                 observation_type='squares', max_episode_steps=75, hard_walls=False, channels_first=True, seed=None):
+    def __init__(self, mode='default', n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, width=10,
+                 embodied_agent=False, return_state=True, observation_type='squares', max_episode_steps=75,
+                 hard_walls=False, channels_first=True, seed=None, render_scale=5):
         self.w = width
         self.step_limit = max_episode_steps
         self.n_boxes = n_boxes
+        self.embodied_agent = embodied_agent
 
         self.goal_ids = set()
         self.static_box_ids = set()
@@ -96,10 +115,12 @@ class Push(gym.Env):
 
         assert len(self.goal_ids) == n_goals
         assert len(self.static_box_ids) == n_static_boxes
+        if self.embodied_agent:
+            assert self.n_boxes > len(self.goal_ids) + len(self.static_box_ids)
 
-        self.n_boxes_in_game = self.n_boxes - len(self.goal_ids) - len(self.static_box_ids)
+        self.n_boxes_in_game = self.n_boxes - len(self.goal_ids) - len(self.static_box_ids) - self.embodied_agent
         self.static_goals = static_goals
-        self.render_scale = 5
+        self.render_scale = render_scale
         self.hard_walls = hard_walls
         self.colors = get_colors(num_colors=max(9, self.n_boxes))
         self.observation_type = observation_type
@@ -115,14 +136,21 @@ class Push(gym.Env):
 
         self.np_random = None
 
-        self.action_space = spaces.Discrete(4 * (self.n_boxes - len(self.goal_ids) * self.static_goals) - len(self.static_box_ids))
+        if self.embodied_agent:
+            self.action_space = spaces.Discrete(4)
+        else:
+            self.action_space = spaces.Discrete(
+                4 * (self.n_boxes - len(self.goal_ids) * self.static_goals - len(self.static_box_ids))
+            )
+
         if self.observation_type == 'grid':
+            raise NotImplementedError(f'Observation type "{observation_type}" has not been implemented yet')
+            # channels are movable boxes, goals, static boxes
             self.observation_space = spaces.Box(
                 0,
                 1,
                 (self.w, self.w, self.n_boxes)
             )
-            # channels are movable boxes, goals, static boxes
         elif self.observation_type in ('squares', 'shapes'):
             observation_shape = (self.w * self.render_scale, self.w * self.render_scale, 3)
             if self.channels_first:
@@ -220,8 +248,12 @@ class Push(gym.Env):
         elif not self.is_in_grid(box_new_pos):
             reward += -0.1
             if not self.hard_walls:
-                # push out of grid, destroy
-                self._destroy_box(box_id)
+                # push out of grid, destroy box or finish episode if an agent is out of the grid
+                if self.embodied_agent:
+                    reward -= 1
+                    done = True
+                else:
+                    self._destroy_box(box_id)
         elif not self._is_free_cell(box_new_pos):
             # push into another box
             another_box_id = self._get_occupied_box_id(box_new_pos)
@@ -246,8 +278,29 @@ class Push(gym.Env):
                             self._destroy_box(another_box_id)
                             self._move(box_id, box_new_pos)
                 elif another_box_type == self.GOAL:
-                    reward += 1
-                    self._destroy_box(box_id)
+                    if self.embodied_agent:
+                        another_box_new_pos = box_new_pos + vec
+                        if self.is_in_grid(another_box_new_pos):
+                            if self._is_free_cell(another_box_new_pos):
+                                self._move(another_box_id, another_box_new_pos)
+                                self._move(box_id, box_new_pos)
+                            elif self._get_type(self._get_occupied_box_id(another_box_new_pos)) == self.GOAL:
+                                reward += -0.1
+                            else:
+                                assert self._get_type(self._get_occupied_box_id(another_box_new_pos)) in (self.BOX, self.STATIC_BOX)
+                                reward += 1
+                                self._destroy_box(self._get_occupied_box_id(another_box_new_pos))
+                                self._move(another_box_id, another_box_new_pos)
+                                self._move(box_id, box_new_pos)
+                        else:
+                            reward += -0.1
+                            if not self.hard_walls:
+                                reward -= 1
+                                self._destroy_box(another_box_id)
+                                self._move(box_id, box_new_pos)
+                    else:
+                        reward += 1
+                        self._destroy_box(box_id)
                 else:
                     assert box_type == self.STATIC_BOX
                     reward += -0.1
@@ -300,7 +353,8 @@ class Push(gym.Env):
         self.__dict__.update(state_dict)
 
     def get_action_meanings(self):
-        return ["down", "left", "up", "right"] * (self.n_boxes - len(self.static_box_ids) - len(self.goal_ids) * self.static_goals)
+        return ["down", "left", "up", "right"] * (
+                    self.n_boxes - len(self.static_box_ids) - len(self.goal_ids) * self.static_goals)
 
     def render_squares(self):
         im = np.zeros((self.w * self.render_scale, self.w * self.render_scale, 3), dtype=np.float32)
@@ -328,9 +382,6 @@ class Push(gym.Env):
 
             shape_id = idx % 8
             if shape_id == 0:
-                # radius = self.render_scale // 2
-                # rr, cc = skimage.draw.circle(
-                #     pos[0] * self.render_scale + radius, pos[1] * self.render_scale + radius, radius, im.shape)
                 rr, cc = circle(pos[0] * self.render_scale, pos[1] * self.render_scale, self.render_scale, im.shape)
             elif shape_id == 1:
                 rr, cc = triangle(
@@ -368,7 +419,8 @@ if __name__ == "__main__":
     If called directly with argument "random", evaluates the average return of a random policy.
     If called without arguments, starts an interactive game played with wasd to move, q to quit.
     """
-    env = Push(n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, observation_type='shapes', hard_walls=True, channels_first=False, width=5)
+    env = Push(n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, observation_type='shapes', hard_walls=True,
+               channels_first=False, width=5, embodied_agent=True, render_scale=10)
 
     if len(sys.argv) > 1 and sys.argv[1] == "random":
         all_r = []
@@ -378,14 +430,14 @@ if __name__ == "__main__":
             plt.imshow(s[1])
             plt.show()
             done = False
-            episode_r =0
+            episode_r = 0
             while not done:
                 s, r, done, _ = env.step(np.random.randint(env.action_space.n))
                 episode_r += r
                 plt.imshow(s[1])
                 plt.show()
             all_r.append(episode_r)
-        print(np.mean(all_r), np.std(all_r), np.std(all_r)/np.sqrt(n_episodes))
+        print(np.mean(all_r), np.std(all_r), np.std(all_r) / np.sqrt(n_episodes))
     else:
         s = env.reset()
         plt.imshow(s[1])
