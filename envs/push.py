@@ -9,8 +9,6 @@ import copy
 
 from matplotlib import pyplot as plt
 
-import utils
-
 
 def get_colors(cmap='Set1', num_colors=9):
     """Get color array from matplotlib colormap."""
@@ -79,7 +77,7 @@ class Push(gym.Env):
     STATIC_BOX = 'static_box'
     BOX = 'box'
 
-    def __init__(self, mode='default', n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, width=10,
+    def __init__(self, mode='default', n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, width=10, return_state=True,
                  observation_type='squares', max_episode_steps=75, hard_walls=False, channels_first=True, seed=None):
         self.w = width
         self.step_limit = max_episode_steps
@@ -103,8 +101,9 @@ class Push(gym.Env):
         self.static_goals = static_goals
         self.render_scale = 5
         self.hard_walls = hard_walls
-        self.colors = utils.get_colors(num_colors=max(9, self.n_boxes))
+        self.colors = get_colors(num_colors=max(9, self.n_boxes))
         self.observation_type = observation_type
+        self.return_state = return_state
         self.channels_first = channels_first
 
         self.directions = {
@@ -153,7 +152,10 @@ class Push(gym.Env):
         else:
             assert False, f'Invalid observation type: {self.observation_type}.'
 
-        return self.state, image
+        if self.return_state:
+            return self.state, image
+
+        return image
 
     def reset(self):
         state = np.full(shape=[self.w, self.w], fill_value=-1, dtype=np.int32)
