@@ -75,22 +75,37 @@ def scalene_triangle(r0, c0, width, im_size):
 
 
 class Push(gym.Env):
-    def __init__(self, mode='default', n_boxes=4, n_static_boxes=0, n_goals=2, observation_type='squares', max_episode_steps=75, hard_walls=False, seed=None):
-        self.w = 10
+    GOAL = 'goal'
+    STATIC_BOX = 'static_box'
+    BOX = 'box'
+
+    def __init__(self, mode='default', n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, width=10,
+                 observation_type='squares', max_episode_steps=75, hard_walls=False, channels_first=True, seed=None):
+        self.w = width
         self.step_limit = max_episode_steps
         self.n_boxes = n_boxes
-        self.n_static_boxes = n_static_boxes
-        self.n_obstacles = 0
-        self.n_goals = n_goals
-        self.box_block = True
-        self.walls = False
-        self.soft_obstacles = True
+
+        self.goal_ids = set()
+        self.static_box_ids = set()
+        for k in range(self.n_boxes):
+            box_id = self.n_boxes - k - 1
+            if k < n_goals:
+                self.goal_ids.add(box_id)
+            elif k < n_goals + n_static_boxes:
+                self.static_box_ids.add(box_id)
+            else:
+                break
+
+        assert len(self.goal_ids) == n_goals
+        assert len(self.static_box_ids) == n_static_boxes
+
+        self.n_boxes_in_game = self.n_boxes - len(self.goal_ids) - len(self.static_box_ids)
+        self.static_goals = static_goals
         self.render_scale = 5
         self.hard_walls = hard_walls
-        self.colors = utils.get_colors(num_colors=max(9, self.n_boxes + self.n_goals))
+        self.colors = utils.get_colors(num_colors=max(9, self.n_boxes))
         self.observation_type = observation_type
-
-        self.use_obst = self.n_obstacles > 0 or self.walls
+        self.channels_first = channels_first
 
         self.directions = {
             0: np.asarray((1, 0)),
@@ -100,18 +115,20 @@ class Push(gym.Env):
         }
 
         self.np_random = None
-        self.channels_first = True
 
-        self.action_space = spaces.Discrete(4 * (self.n_boxes - self.n_static_boxes))
+        self.action_space = spaces.Discrete(4 * (self.n_boxes - len(self.goal_ids) * self.static_goals) - len(self.static_box_ids))
         if self.observation_type == 'grid':
             self.observation_space = spaces.Box(
                 0,
                 1,
-                (self.w, self.w, self.n_goals + self.n_boxes + self.n_obstacles)
+                (self.w, self.w, self.n_boxes)
             )
-            # channels are n_goals, n_boxes, n_obstacles, time remaining
+            # channels are movable boxes, goals, static boxes
         elif self.observation_type in ('squares', 'shapes'):
-            self.observation_space = spaces.Box(0, 255, (3, self.w * self.render_scale, self.w * self.render_scale), dtype=np.uint8)
+            observation_shape = (self.w * self.render_scale, self.w * self.render_scale, 3)
+            if self.channels_first:
+                observation_shape = (observation_shape[2], *observation_shape[:2])
+            self.observation_space = spaces.Box(0, 255, observation_shape, dtype=np.uint8)
         else:
             raise ValueError(f'Invalid observation_type: {self.observation_type}.')
 
@@ -120,7 +137,6 @@ class Push(gym.Env):
         self.pos = None
         self.image = None
         self.box_pos = np.zeros(shape=(self.n_boxes, 2), dtype=np.int32)
-        self.goal_pos = np.zeros(shape=(self.n_goals, 2), dtype=np.int32)
 
         self.seed(seed)
         self.reset()
@@ -140,123 +156,118 @@ class Push(gym.Env):
         return self.state, image
 
     def reset(self):
-        state = np.zeros([self.w, self.w, self.n_goals + self.n_boxes + self.n_obstacles + 1])
-        # initialise time-remaining to 1.
-        state[:, :, self.n_goals + self.n_boxes + self.n_obstacles].fill(1)
-
-        # fill in walls at borders
-        if self.walls:
-            assert False, 'Walls are not supported in channel-wise version'
-            state[0, :, 2].fill(1)
-            state[self.w - 1, :, 2].fill(1)
-            state[:, 0, 2].fill(1)
-            state[:, self.w - 1, 2].fill(1)
+        state = np.full(shape=[self.w, self.w], fill_value=-1, dtype=np.int32)
 
         # sample random locations for self, goals, and walls.
-        locs = np.random.choice((self.w - 2 - (2 * self.walls)) ** 2, self.n_goals + self.n_boxes + self.n_obstacles, replace=False)
+        locs = np.random.choice(self.w ** 2, self.n_boxes, replace=False)
 
-        xs, ys = np.unravel_index(locs, [self.w - 2 - (2 * self.walls), self.w - 2 - (2 * self.walls)])
-        xs += 1 + self.walls
-        ys += 1 + self.walls
+        xs, ys = np.unravel_index(locs, [self.w, self.w])
 
         # populate state with locations
         for i, (x, y) in enumerate(zip(xs, ys)):
-            state[x, y, i] = 1
-            if i < self.n_goals:
-                goal_id = i
-                self.goal_pos[goal_id, :] = x, y
-            elif self.n_goals <= i < self.n_goals + self.n_boxes:
-                box_id = i - self.n_goals
-                self.box_pos[box_id, :] = x, y
-            else:
-                assert self.n_obstacles > 0
+            state[x, y] = i
+            self.box_pos[i, :] = x, y
 
         self.state = state
         self.steps_taken = 0
-        self.boxes_left = self.n_boxes
-        self.edge_boxes = 0
 
         return self._get_observation()
 
-    def _box_channel(self, box_id):
-        return self.n_goals + box_id
+    def _get_type(self, box_id):
+        if box_id in self.goal_ids:
+            return self.GOAL
+        elif box_id in self.static_box_ids:
+            return self.STATIC_BOX
+        else:
+            return self.BOX
 
-    def _current_map(self):
-        # channels are 0: goals, 1: boxes, 2: obstacles
-        current_map = np.zeros((self.w, self.w, 2 + self.use_obst))
-        current_map[:, :, 0] = self.state[:, :, :self.n_goals].sum(axis=-1)
-        current_map[:, :, 1] = self.state[:, :, self.n_goals:self.n_goals + self.n_boxes].sum(axis=-1)
+    def _destroy_box(self, box_id):
+        box_pos = self.box_pos[box_id]
+        self.state[box_pos[0], box_pos[1]] = -1
+        self.box_pos[box_id] = -1, -1
+        if self._get_type(box_id) == self.BOX:
+            self.n_boxes_in_game -= 1
 
-        if self.use_obst:
-            current_map[:, :, 2] = self.state[:, :, self.n_goals + self.n_boxes:].sum(axis=-1)
+    def _move(self, box_id, new_pos):
+        old_pos = self.box_pos[box_id]
+        self.state[old_pos[0], old_pos[1]] = -1
+        self.state[new_pos[0], new_pos[1]] = box_id
+        self.box_pos[box_id] = new_pos
 
-        if not self.soft_obstacles:
-            assert np.max(current_map) <= 1
+    def _is_free_cell(self, pos):
+        return self.state[pos[0], pos[1]] == -1
 
-        return current_map
+    def _get_occupied_box_id(self, pos):
+        return self.state[pos[0], pos[1]]
 
     def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
 
-        direction = action % 4
-        vec = self.directions[direction]
-
-        box_id = action // 4
-        old_box_pos = self.box_pos[box_id]
-        box_pos = old_box_pos + vec
-        box_channel = self._box_channel(box_id)
+        vec = self.directions[action % len(self.directions)]
+        box_id = action // len(self.directions)
+        box_old_pos = self.box_pos[box_id]
+        box_new_pos = box_old_pos + vec
+        box_type = self._get_type(box_id)
 
         done = False
         reward = -0.01
-        current_map = self._current_map()
 
-        if self.state[old_box_pos[0], old_box_pos[1], box_channel] == 0:
+        if self._is_free_cell(box_old_pos):
             # This box is out of the game. There is nothing to do.
             pass
-        elif not self.is_in_grid(box_pos):
+        elif not self.is_in_grid(box_new_pos):
+            reward += -0.1
             if not self.hard_walls:
                 # push out of grid, destroy
-                self.state[old_box_pos[0], old_box_pos[1], box_channel] = 0
-                self.box_pos[box_id] = -1, -1
-                self.boxes_left -= 1
-                reward += -0.1
-        elif current_map[box_pos[0], box_pos[1], 1] == 1:
-            # push into another box,
-            if self.box_block:
-                # blocking, so no movement
-                reward += -0.1
+                self._destroy_box(box_id)
+        elif not self._is_free_cell(box_new_pos):
+            # push into another box
+            another_box_id = self._get_occupied_box_id(box_new_pos)
+            another_box_type = self._get_type(another_box_id)
+
+            if box_type == self.BOX:
+                if another_box_type == self.BOX:
+                    another_box_new_pos = box_new_pos + vec
+                    if self.is_in_grid(another_box_new_pos):
+                        if self._is_free_cell(another_box_new_pos):
+                            self._move(another_box_id, another_box_new_pos)
+                            self._move(box_id, box_new_pos)
+                        elif self._get_type(self._get_occupied_box_id(another_box_new_pos)) == self.GOAL:
+                            reward += 1
+                            self._destroy_box(another_box_id)
+                            self._move(box_id, box_new_pos)
+                        else:
+                            reward += -0.1
+                    else:
+                        reward += -0.1
+                        if not self.hard_walls:
+                            self._destroy_box(another_box_id)
+                            self._move(box_id, box_new_pos)
+                elif another_box_type == self.GOAL:
+                    reward += 1
+                    self._destroy_box(box_id)
+                else:
+                    assert box_type == self.STATIC_BOX
+                    reward += -0.1
+            elif box_type == self.GOAL:
+                if another_box_type in (self.BOX, self.STATIC_BOX):
+                    self._destroy_box(another_box_id)
+                    self._move(box_id, box_new_pos)
+                    reward += 1
+                else:
+                    assert another_box_type == self.GOAL
+                    reward += -0.1
             else:
-                # not blocking, so destroy
-                self.state[old_box_pos[0], old_box_pos[1], box_channel] = 0
-                self.box_pos[box_id] = -1, -1
-                self.boxes_left -= 1
-                reward += -0.1
-        elif self.use_obst and current_map[box_pos[0], box_pos[1], 2] == 1:
-            # push into obstacle
-            if self.soft_obstacles:
-                reward += -0.2
-                self.state[old_box_pos[0], old_box_pos[1], box_channel] = 0
-                self.state[box_pos[0], box_pos[1], box_channel] = 1
-                self.box_pos[box_id] = box_pos
-            else:
-                reward += -0.1
-        elif current_map[box_pos[0], box_pos[1], 0] == 1:
-            # pushed into goal, get reward
-            self.boxes_left -= 1
-            self.state[old_box_pos[0], old_box_pos[1], box_channel] = 0
-            self.box_pos[box_id] = -1, -1
-            reward += 1.0
+                assert False, f'Cannot move a box of type:{box_type}'
         else:
             # pushed into open space, move box
-            self.state[old_box_pos[0], old_box_pos[1], box_channel] = 0
-            self.state[box_pos[0], box_pos[1], box_channel] = 1
-            self.box_pos[box_id] = box_pos
+            self._move(box_id, box_new_pos)
 
         self.steps_taken += 1
         if self.steps_taken >= self.step_limit:
             done = True
 
-        if self.boxes_left == 0:
+        if self.n_boxes_in_game == 0:
             done = True
 
         return self._get_observation(), reward, done, {}
@@ -264,18 +275,18 @@ class Push(gym.Env):
     def is_in_grid(self, point):
         return (0 <= point[0] < self.w) and (0 <= point[1] < self.w)
 
-    def is_on_edge(self, point):
-        return (0 == point[0]) or (0 == point[1]) or (self.w - 1 == point[0]) or (self.w - 1 == point[1])
-
     def print(self, message=''):
-        out = np.zeros([self.w, self.w])
-        state = self._current_map()
-        if self.use_obst:
-            out[state[:, :, 2].astype(bool)] = 4
-        out[state[:, :, 1].astype(bool)] = 3
-        out[state[:, :, 0].astype(bool)] = 2
-        chars = {0: ".", 1: "x", 2: "O", 3: "#", 4:"@"}
-        pretty = "\n".join(["".join([chars[x] for x in row]) for row in out])
+        state = self.state
+        chars = {-1: '.'}
+        for box_id in range(self.n_boxes):
+            if box_id in self.goal_ids:
+                chars[box_id] = 'x'
+            elif box_id in self.static_box_ids:
+                chars[box_id] = '#'
+            else:
+                chars[box_id] = '@'
+
+        pretty = "\n".join(["".join([chars[x] for x in row]) for row in state])
         print(pretty)
         print("TIMELEFT ", self.step_limit - self.steps_taken, message)
 
@@ -287,7 +298,7 @@ class Push(gym.Env):
         self.__dict__.update(state_dict)
 
     def get_action_meanings(self):
-        return ["down", "left", "up", "right"] * self.n_boxes
+        return ["down", "left", "up", "right"] * (self.n_boxes - len(self.static_box_ids) - len(self.goal_ids) * self.static_goals)
 
     def render_squares(self):
         im = np.zeros((self.w * self.render_scale, self.w * self.render_scale, 3), dtype=np.float32)
@@ -299,10 +310,6 @@ class Push(gym.Env):
             rr, cc = square(pos[0] * self.render_scale, pos[1] * self.render_scale, self.render_scale, im.shape)
             im[rr, cc, :] = self.colors[idx][:3]
 
-        for idx, pos in enumerate(self.goal_pos):
-            rr, cc = square(pos[0] * self.render_scale, pos[1] * self.render_scale, self.render_scale, im.shape)
-            im[rr, cc, :] = 1
-
         if self.channels_first:
             im = im.transpose([2, 0, 1])
 
@@ -310,9 +317,9 @@ class Push(gym.Env):
 
         return im.astype(dtype=np.uint8)
 
-    def render_shapes(self,):
+    def render_shapes(self):
         im = np.zeros((self.w * self.render_scale, self.w * self.render_scale, 3), dtype=np.float32)
-        for idx, pos in enumerate(np.concatenate([self.box_pos, self.goal_pos], axis=0)):
+        for idx, pos in enumerate(self.box_pos):
             if pos[0] == -1:
                 assert pos[1] == -1
                 continue
@@ -359,7 +366,7 @@ if __name__ == "__main__":
     If called directly with argument "random", evaluates the average return of a random policy.
     If called without arguments, starts an interactive game played with wasd to move, q to quit.
     """
-    env = Push()
+    env = Push(n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, observation_type='shapes', hard_walls=True, channels_first=False, width=5)
 
     if len(sys.argv) > 1 and sys.argv[1] == "random":
         all_r = []
@@ -391,6 +398,7 @@ if __name__ == "__main__":
 
             obj_id = int(keys[0])
             key = keys[1]
+            print(f'obj_id:{obj_id},action={key}')
             if key == "a":
                 a = 1
             elif key == "s":
@@ -407,7 +415,7 @@ if __name__ == "__main__":
             s, r, d, _ = env.step(a)
             episode_r += r
             env.print(f'. Reward: {episode_r}')
-            plt.imshow(env.render_squares().transpose([1, 2, 0]))
+            plt.imshow(s[1])
             plt.show()
             if d or key == "r":
                 print("Done with {} points. Resetting!".format(episode_r))
