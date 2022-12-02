@@ -28,6 +28,7 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='Disable CUDA training.')
 parser.add_argument('--decoder-folder', type=str)
 parser.add_argument('--pixel-scale', type=float, default=1., help='Normalize pixel values in observation.')
+parser.add_argument('--save_extractor_encoder', type=bool, default=True, help='Whether to save model\'s extractor and encoder')
 
 args_eval = parser.parse_args()
 
@@ -73,6 +74,11 @@ model = modules.ContrastiveSWM(
 
 model.load_state_dict(torch.load(model_file))
 model.eval()
+
+if args.save_extractor_encoder:
+    for module_name, module in zip(['obj_extractor', 'obj_encoder'], [model.obj_extractor, model.obj_encoder]):
+        save_path = os.path.join(args_eval.save_folder, args_eval.decoder_folder, f'{module_name}.pt')
+        torch.save(model.extractor.state_dict(), save_path)
 
 if args.encoder == 'large':
     decoder = modules.DecoderCNNLarge(
