@@ -78,7 +78,7 @@ model.eval()
 if args_eval.save_extractor_encoder:
     for module_name, module in zip(['obj_extractor', 'obj_encoder'], [model.obj_extractor, model.obj_encoder]):
         save_path = os.path.join(args_eval.save_folder, args_eval.decoder_folder, f'{module_name}.pt')
-        torch.save(model.extractor.state_dict(), save_path)
+        torch.save(module.state_dict(), save_path)
 
 if args.encoder == 'large':
     decoder = modules.DecoderCNNLarge(
