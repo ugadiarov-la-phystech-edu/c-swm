@@ -12,6 +12,7 @@ from torch.utils import data
 import torch.nn.functional as F
 
 import modules
+import wandb
 
 
 parser = argparse.ArgumentParser()
@@ -63,6 +64,8 @@ parser.add_argument('--save-folder', type=str,
 parser.add_argument('--pixel-scale', type=float, default=1., help='Normalize pixel values in observation.')
 parser.add_argument('--shuffle-objects', type=bool, default=False)
 parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
+parser.add_argument('--project', type=str, required=True)
+parser.add_argument('--run_id', type=str, default='run-0')
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -157,9 +160,16 @@ print('Starting model training...')
 step = 0
 best_loss = 1e9
 
+wandb.init(
+    project=args.project,
+    save_code=True,
+    name=args.run_id
+)
+
 for epoch in range(1, args.epochs + 1):
     model.train()
     train_loss = 0
+    n = 0
 
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = [tensor.to(device) for tensor in data_batch]
@@ -189,6 +199,7 @@ for epoch in range(1, args.epochs + 1):
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
+        n += obs.size(0)
 
         if args.decoder:
             optimizer_dec.step()
@@ -203,9 +214,11 @@ for epoch in range(1, args.epochs + 1):
 
         step += 1
 
-    avg_loss = train_loss / len(train_loader.dataset)
+    avg_loss = train_loss / n
     print('====> Epoch: {} Average loss: {:.8f}'.format(
         epoch, avg_loss))
+
+    wandb.log({'epoch': epoch, 'loss': avg_loss})
 
     if avg_loss < best_loss:
         best_loss = avg_loss
