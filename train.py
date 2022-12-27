@@ -12,6 +12,7 @@ from torch.utils import data
 import torch.nn.functional as F
 
 import modules
+import wandb
 
 
 parser = argparse.ArgumentParser()
@@ -62,6 +63,9 @@ parser.add_argument('--save-folder', type=str,
                     help='Path to checkpoints.')
 parser.add_argument('--pixel-scale', type=float, default=1., help='Normalize pixel values in observation.')
 parser.add_argument('--shuffle-objects', type=bool, default=False)
+parser.add_argument('--interaction_score_threshold', type=float, required=True)
+parser.add_argument('--project', type=str, required=True)
+parser.add_argument('--run_id', type=str, default='run-0')
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -116,7 +120,9 @@ model = modules.ContrastiveSWM(
     hinge=args.hinge,
     ignore_action=args.ignore_action,
     copy_action=args.copy_action,
-    encoder=args.encoder, shuffle_objects=args.shuffle_objects).to(device)
+    encoder=args.encoder, shuffle_objects=args.shuffle_objects,
+    interaction_score_threshold=args.interaction_score_threshold
+).to(device)
 
 model.apply(utils.weights_init)
 
@@ -154,9 +160,16 @@ print('Starting model training...')
 step = 0
 best_loss = 1e9
 
+wandb.init(
+    project=args.project,
+    save_code=True,
+    name=args.run_id
+)
+
 for epoch in range(1, args.epochs + 1):
     model.train()
     train_loss = 0
+    n = 0
 
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = [tensor.to(device) for tensor in data_batch]
@@ -186,6 +199,7 @@ for epoch in range(1, args.epochs + 1):
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
+        n += obs.size(0)
 
         if args.decoder:
             optimizer_dec.step()
@@ -200,10 +214,16 @@ for epoch in range(1, args.epochs + 1):
 
         step += 1
 
-    avg_loss = train_loss / len(train_loader.dataset)
-    print('====> Epoch: {} Average loss: {:.8f}'.format(
-        epoch, avg_loss))
+    avg_loss = train_loss / n
+    interaction_fraction = model.transition_model.get_interaction_fraction()
+    model.transition_model.reset_statistics()
+    print('====> Epoch: {} Average loss: {:.8f} Interaction fraction: {:.8f}'.format(
+        epoch, avg_loss, interaction_fraction))
+
+    wandb.log({'epoch': epoch, 'loss': avg_loss, 'interaction_fraction': interaction_fraction})
 
     if avg_loss < best_loss:
         best_loss = avg_loss
         torch.save(model.state_dict(), model_file)
+
+wandb.finish()

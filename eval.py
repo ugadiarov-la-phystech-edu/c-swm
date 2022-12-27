@@ -25,6 +25,7 @@ parser.add_argument('--dataset', type=str,
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='Disable CUDA training.')
 parser.add_argument('--pixel-scale', type=float, default=1., help='Normalize pixel values in observation.')
+parser.add_argument('--interaction_score_threshold', type=float, required=True)
 
 args_eval = parser.parse_args()
 
@@ -65,7 +66,9 @@ model = modules.ContrastiveSWM(
     hinge=args.hinge,
     ignore_action=args.ignore_action,
     copy_action=args.copy_action,
-    encoder=args.encoder).to(device)
+    encoder=args.encoder,
+    interaction_score_threshold=args.interaction_score_threshold
+).to(device)
 
 model.load_state_dict(torch.load(model_file))
 model.eval()

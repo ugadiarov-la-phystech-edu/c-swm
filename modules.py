@@ -1,3 +1,5 @@
+import collections
+
 import utils
 
 import numpy as np
@@ -18,7 +20,7 @@ class ContrastiveSWM(nn.Module):
     """
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim,
                  num_objects, hinge=1., sigma=0.5, encoder='large',
-                 ignore_action=False, copy_action=False, shuffle_objects=False):
+                 ignore_action=False, copy_action=False, shuffle_objects=False, interaction_score_threshold=0.5):
         super(ContrastiveSWM, self).__init__()
         self.shuffle_objects = shuffle_objects
 
@@ -30,6 +32,7 @@ class ContrastiveSWM(nn.Module):
         self.sigma = sigma
         self.ignore_action = ignore_action
         self.copy_action = copy_action
+        self.interaction_score_threshold = interaction_score_threshold
         
         self.pos_loss = 0
         self.neg_loss = 0
@@ -77,7 +80,9 @@ class ContrastiveSWM(nn.Module):
             action_dim=action_dim,
             num_objects=num_objects,
             ignore_action=ignore_action,
-            copy_action=copy_action)
+            copy_action=copy_action,
+            interaction_score_threshold=self.interaction_score_threshold
+        )
 
         self.width = width_height[0]
         self.height = width_height[1]
@@ -130,7 +135,7 @@ class ContrastiveSWM(nn.Module):
 class TransitionGNN(torch.nn.Module):
     """GNN-based transition function."""
     def __init__(self, input_dim, hidden_dim, action_dim, num_objects,
-                 ignore_action=False, copy_action=False, act_fn='relu'):
+                 ignore_action=False, copy_action=False, act_fn='relu', interaction_score_threshold=0.5):
         super(TransitionGNN, self).__init__()
 
         self.input_dim = input_dim
@@ -138,6 +143,7 @@ class TransitionGNN(torch.nn.Module):
         self.num_objects = num_objects
         self.ignore_action = ignore_action
         self.copy_action = copy_action
+        self.interaction_score_threshold = interaction_score_threshold
 
         if self.ignore_action:
             self.action_dim = 0
@@ -164,6 +170,8 @@ class TransitionGNN(torch.nn.Module):
 
         self.edge_list = None
         self.batch_size = 0
+        self.exclude_diagonal_from_flatten_indices = None
+        self.statistics = collections.Counter()
 
     def _edge_model(self, source, target, edge_attr):
         del edge_attr  # Unused.
@@ -180,11 +188,9 @@ class TransitionGNN(torch.nn.Module):
             out = node_attr
         return self.node_mlp(out)
 
-    def _get_edge_list_fully_connected(self, batch_size, num_objects, cuda):
+    def _get_edge_list_fully_connected(self, batch_size, num_objects, cuda, new_batch_size):
         # Only re-evaluate if necessary (e.g. if batch size changed).
-        if self.edge_list is None or self.batch_size != batch_size:
-            self.batch_size = batch_size
-
+        if self.edge_list is None or new_batch_size:
             # Create fully-connected adjacency matrix for single sample.
             adj_full = torch.ones(num_objects, num_objects)
 
@@ -208,6 +214,12 @@ class TransitionGNN(torch.nn.Module):
 
         return self.edge_list
 
+    def get_interaction_fraction(self):
+        return self.statistics['n_interactions'] / self.statistics['n_pairs']
+
+    def reset_statistics(self):
+        self.statistics = collections.Counter()
+
     def forward(self, states, action):
 
         cuda = states.is_cuda
@@ -223,12 +235,34 @@ class TransitionGNN(torch.nn.Module):
 
         if num_nodes > 1:
             # edge_index: [B * (num_objects*[num_objects-1]), 2] edge list
+            new_batch_size = self.batch_size != batch_size
+            self.batch_size = batch_size
+
             edge_index = self._get_edge_list_fully_connected(
-                batch_size, num_nodes, cuda)
+                batch_size, num_nodes, cuda, new_batch_size)
+
+            if self.exclude_diagonal_from_flatten_indices is None or new_batch_size:
+                self.exclude_diagonal_from_flatten_indices = torch.unsqueeze(
+                    torch.logical_xor(
+                        torch.ones(size=(num_nodes, num_nodes), dtype=torch.bool),
+                        torch.eye(num_nodes, dtype=torch.bool)
+                    ),
+                    0
+                ).expand(batch_size, num_nodes, num_nodes).flatten()
+
+            interaction_score = torch.sigmoid(
+                torch.matmul(states, states.transpose(1, 2)) / states.size(-1) ** 0.5
+            )
+            interacting_objects = interaction_score > self.interaction_score_threshold
+            interacting_objects_flatten = interacting_objects.flatten()[self.exclude_diagonal_from_flatten_indices]
+
+            self.statistics['n_pairs'] += interacting_objects_flatten.size(0)
+            self.statistics['n_interactions'] += interacting_objects_flatten.sum()
 
             row, col = edge_index
             edge_attr = self._edge_model(
                 node_attr[row], node_attr[col], edge_attr)
+            edge_attr[~interacting_objects_flatten] = 0
 
         if not self.ignore_action:
 
