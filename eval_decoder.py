@@ -29,6 +29,7 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
 parser.add_argument('--decoder-folder', type=str)
 parser.add_argument('--pixel-scale', type=float, default=1., help='Normalize pixel values in observation.')
 parser.add_argument('--save_extractor_encoder', type=bool, default=True, help='Whether to save model\'s extractor and encoder')
+parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
 
 args_eval = parser.parse_args()
 
@@ -70,7 +71,9 @@ model = modules.ContrastiveSWM(
     hinge=args.hinge,
     ignore_action=args.ignore_action,
     copy_action=args.copy_action,
-    encoder=args.encoder).to(device)
+    encoder=args.encoder,
+    use_interactions=args.use_interactions
+).to(device)
 
 model.load_state_dict(torch.load(model_file))
 model.eval()

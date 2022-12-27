@@ -18,7 +18,7 @@ class ContrastiveSWM(nn.Module):
     """
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim,
                  num_objects, hinge=1., sigma=0.5, encoder='large',
-                 ignore_action=False, copy_action=False, shuffle_objects=False):
+                 ignore_action=False, copy_action=False, shuffle_objects=False, use_interactions=True):
         super(ContrastiveSWM, self).__init__()
         self.shuffle_objects = shuffle_objects
 
@@ -30,6 +30,7 @@ class ContrastiveSWM(nn.Module):
         self.sigma = sigma
         self.ignore_action = ignore_action
         self.copy_action = copy_action
+        self.use_interactions = use_interactions
         
         self.pos_loss = 0
         self.neg_loss = 0
@@ -77,7 +78,9 @@ class ContrastiveSWM(nn.Module):
             action_dim=action_dim,
             num_objects=num_objects,
             ignore_action=ignore_action,
-            copy_action=copy_action)
+            copy_action=copy_action,
+            use_interactions=self.use_interactions
+        )
 
         self.width = width_height[0]
         self.height = width_height[1]
@@ -130,7 +133,7 @@ class ContrastiveSWM(nn.Module):
 class TransitionGNN(torch.nn.Module):
     """GNN-based transition function."""
     def __init__(self, input_dim, hidden_dim, action_dim, num_objects,
-                 ignore_action=False, copy_action=False, act_fn='relu'):
+                 ignore_action=False, copy_action=False, act_fn='relu', use_interactions=True):
         super(TransitionGNN, self).__init__()
 
         self.input_dim = input_dim
@@ -138,6 +141,7 @@ class TransitionGNN(torch.nn.Module):
         self.num_objects = num_objects
         self.ignore_action = ignore_action
         self.copy_action = copy_action
+        self.use_interactions = use_interactions
 
         if self.ignore_action:
             self.action_dim = 0
@@ -152,7 +156,9 @@ class TransitionGNN(torch.nn.Module):
             utils.get_act_fn(act_fn),
             nn.Linear(hidden_dim, hidden_dim))
 
-        node_input_dim = hidden_dim + input_dim + self.action_dim
+        node_input_dim = input_dim + self.action_dim
+        if self.use_interactions:
+            node_input_dim += hidden_dim
 
         self.node_mlp = nn.Sequential(
             nn.Linear(node_input_dim, hidden_dim),
@@ -243,6 +249,9 @@ class TransitionGNN(torch.nn.Module):
 
             # Attach action to each state
             node_attr = torch.cat([node_attr, action_vec], dim=-1)
+
+        if not self.use_interactions:
+            edge_attr = None
 
         node_attr = self._node_model(
             node_attr, edge_index, edge_attr)

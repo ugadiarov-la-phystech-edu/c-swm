@@ -62,6 +62,7 @@ parser.add_argument('--save-folder', type=str,
                     help='Path to checkpoints.')
 parser.add_argument('--pixel-scale', type=float, default=1., help='Normalize pixel values in observation.')
 parser.add_argument('--shuffle-objects', type=bool, default=False)
+parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -116,7 +117,9 @@ model = modules.ContrastiveSWM(
     hinge=args.hinge,
     ignore_action=args.ignore_action,
     copy_action=args.copy_action,
-    encoder=args.encoder, shuffle_objects=args.shuffle_objects).to(device)
+    encoder=args.encoder, shuffle_objects=args.shuffle_objects,
+    use_interactions=args.use_interactions == 'True'
+).to(device)
 
 model.apply(utils.weights_init)
 
