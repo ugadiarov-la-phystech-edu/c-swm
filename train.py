@@ -61,7 +61,7 @@ parser.add_argument('--name', type=str, default='none',
 parser.add_argument('--save-folder', type=str,
                     default='checkpoints',
                     help='Path to checkpoints.')
-parser.add_argument('--pixel-scale', type=float, default=1., help='Normalize pixel values in observation.')
+parser.add_argument('--pixel-scale', type=float, required=True, help='Normalize pixel values in observation.')
 parser.add_argument('--shuffle-objects', type=bool, default=False)
 parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
 parser.add_argument('--project', type=str, required=True)

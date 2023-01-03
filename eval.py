@@ -24,7 +24,7 @@ parser.add_argument('--dataset', type=str,
                     help='Dataset string.')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='Disable CUDA training.')
-parser.add_argument('--pixel-scale', type=float, default=1., help='Normalize pixel values in observation.')
+parser.add_argument('--pixel-scale', type=float, required=True, help='Normalize pixel values in observation.')
 parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
 
 args_eval = parser.parse_args()

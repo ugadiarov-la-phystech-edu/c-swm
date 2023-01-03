@@ -38,7 +38,7 @@ class RandomAgent(object):
 def crop_normalize(img, crop_ratio):
     img = img[crop_ratio[0]:crop_ratio[1]]
     img = Image.fromarray(img).resize((50, 50), Image.ANTIALIAS)
-    return np.transpose(np.array(img), (2, 0, 1)) / 255
+    return np.transpose(np.array(img), (2, 0, 1))
 
 
 if __name__ == '__main__':

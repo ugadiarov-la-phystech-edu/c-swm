@@ -40,7 +40,7 @@ data = np.load(args.fname + '.npz')
 
 train_x = np.concatenate(
     (data['train_x'][:, :-1], data['train_x'][:, 1:]), axis=-1)
-train_x = np.transpose(train_x, (0, 1, 4, 2, 3)) / 255.
+train_x = np.transpose(train_x, (0, 1, 4, 2, 3))
 
 replay_buffer = []
 
@@ -48,7 +48,7 @@ for idx in range(data['train_x'].shape[0]):
     sample = {
         'obs': train_x[idx, :-1],
         'next_obs': train_x[idx, 1:],
-        'action': np.zeros((train_x.shape[1] - 1), dtype=np.int64)
+        'action': np.zeros((train_x.shape[1] - 1), dtype=np.int8)
     }
 
     replay_buffer.append(sample)
