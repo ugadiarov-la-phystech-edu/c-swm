@@ -224,4 +224,6 @@ for epoch in range(1, args.epochs + 1):
         values = np.asarray(values)
         print(f'{index}: avg_score={values.mean()} std_score={values.std()} n={values.shape[0] / n_pairs}')
 
+    print(f'n_pairs={n_pairs}')
+
     sys.exit(0)
