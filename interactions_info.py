@@ -222,6 +222,6 @@ for epoch in range(1, args.epochs + 1):
 
     for index, values in model.transition_model.high_score_interactions.items():
         values = np.asarray(values)
-        print(f'{index}: avg_score={values.mean()} std_score={values.std()}')
+        print(f'{index}: avg_score={values.mean()} std_score={values.std()} n={values.shape[0] / n_pairs}')
 
     sys.exit(0)
