@@ -183,6 +183,7 @@ class TransitionGNN(torch.nn.Module):
         self.batch_size = 0
         self.exclude_diagonal_from_flatten_indices = None
         self.statistics = collections.Counter()
+        self.high_score_interactions = collections.defaultdict(list)
 
     def _edge_model(self, source, target, edge_attr):
         del edge_attr  # Unused.
@@ -267,6 +268,14 @@ class TransitionGNN(torch.nn.Module):
             )
             interacting_objects = interaction_score > self.interaction_score_threshold
             interacting_objects_flatten = interacting_objects.flatten()[self.exclude_diagonal_from_flatten_indices]
+
+            high_score_mask = interaction_score * self.exclude_diagonal_from_flatten_indices.reshape(shape=(batch_size, num_nodes, num_nodes)).to('cuda') > 0.52
+            high_scores = interaction_score[high_score_mask]
+            high_score_ids = high_score_mask.nonzero()
+            for ids, score in zip(high_score_ids, high_scores):
+                i = ids[1].item()
+                j = ids[2].item()
+                self.high_score_interactions[(i, j)].append(score.item())
 
             self.statistics['n_pairs'] += interacting_objects_flatten.size(0)
             self.statistics['n_interactions'] += interacting_objects_flatten.sum()
