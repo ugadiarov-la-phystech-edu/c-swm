@@ -66,6 +66,7 @@ parser.add_argument('--shuffle-objects', type=bool, default=False)
 parser.add_argument('--interaction_score_threshold', type=float, required=True)
 parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
+parser.add_argument('--l1_loss_coef', type=float, required=True)
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -121,7 +122,8 @@ model = modules.ContrastiveSWM(
     ignore_action=args.ignore_action,
     copy_action=args.copy_action,
     encoder=args.encoder, shuffle_objects=args.shuffle_objects,
-    interaction_score_threshold=args.interaction_score_threshold
+    interaction_score_threshold=args.interaction_score_threshold,
+    l1_loss_coef=args.l1_loss_coef,
 ).to(device)
 
 model.apply(utils.weights_init)
@@ -170,6 +172,10 @@ for epoch in range(1, args.epochs + 1):
     model.train()
     train_loss = 0
     n = 0
+    interaction_score_mean = 0
+    interaction_score_loss = 0
+    interaction_score_hist = None
+    n_pairs = 0
 
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = [tensor.to(device) for tensor in data_batch]
@@ -194,12 +200,23 @@ for epoch in range(1, args.epochs + 1):
                 reduction='sum') / obs.size(0)
             loss += next_loss
         else:
-            loss = model.contrastive_loss(obs, action, next_obs)
+            loss, metrics = model.contrastive_loss(obs, action, next_obs)
 
         loss.backward()
-        train_loss += loss.item()
+        batch_size = obs.size(0)
+        train_loss += loss.item() * batch_size
         optimizer.step()
-        n += obs.size(0)
+        n += batch_size
+
+        if interaction_score_hist is None:
+            interaction_score_hist = metrics['interaction_score_hist']
+        else:
+            interaction_score_hist += metrics['interaction_score_hist']
+
+        k = metrics['interaction_score_hist'].sum()
+        n_pairs += k
+        interaction_score_mean += metrics['interaction_score_mean'] * k
+        interaction_score_loss += metrics['interaction_score_loss'] * k
 
         if args.decoder:
             optimizer_dec.step()
@@ -215,12 +232,27 @@ for epoch in range(1, args.epochs + 1):
         step += 1
 
     avg_loss = train_loss / n
-    interaction_fraction = model.transition_model.get_interaction_fraction()
+    record = {
+        'epoch': epoch,
+        'loss': avg_loss,
+        'interaction_fraction': model.transition_model.get_interaction_fraction(),
+        'interaction_score_mean': interaction_score_mean / n_pairs,
+        'interaction_score_loss': interaction_score_loss / n_pairs,
+    }
     model.transition_model.reset_statistics()
-    print('====> Epoch: {} Average loss: {:.8f} Interaction fraction: {:.8f}'.format(
-        epoch, avg_loss, interaction_fraction))
+    log_string = f'====> Epoch: {record["epoch"]} Average loss: {record["loss"]:.8f} Interaction fraction: {record["interaction_fraction"]:.8f}'
+    log_string += f' Interaction score: {record["interaction_score_mean"]:.8f} Interaction loss: {record["interaction_score_loss"]:.8f}'
 
-    wandb.log({'epoch': epoch, 'loss': avg_loss, 'interaction_fraction': interaction_fraction})
+    interaction_score_hist = interaction_score_hist / interaction_score_hist.sum()
+
+    delta = 1 / interaction_score_hist.shape[0]
+    for i in range(interaction_score_hist.shape[0]):
+        key = f' interaction_fraction_[{i * delta:.1f};{(i + 1) * delta:.1f}]'
+        record[key] = interaction_score_hist[i]
+        log_string += f'{key}: {interaction_score_hist[i]:.8f}'
+
+    print(log_string)
+    wandb.log(record)
 
     if avg_loss < best_loss:
         best_loss = avg_loss

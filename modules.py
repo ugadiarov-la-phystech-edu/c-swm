@@ -20,7 +20,7 @@ class ContrastiveSWM(nn.Module):
     """
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim,
                  num_objects, hinge=1., sigma=0.5, encoder='large',
-                 ignore_action=False, copy_action=False, shuffle_objects=False, interaction_score_threshold=0.5):
+                 ignore_action=False, copy_action=False, shuffle_objects=False, interaction_score_threshold=0.5, l1_loss_coef=0.):
         super(ContrastiveSWM, self).__init__()
         self.shuffle_objects = shuffle_objects
 
@@ -36,6 +36,8 @@ class ContrastiveSWM(nn.Module):
         
         self.pos_loss = 0
         self.neg_loss = 0
+        self.l1_loss_coef = l1_loss_coef
+        self.n_bins = 5
 
         num_channels = input_dims[0]
         width_height = input_dims[1:]
@@ -92,13 +94,14 @@ class ContrastiveSWM(nn.Module):
 
         norm = 0.5 / (self.sigma**2)
 
+        interation_score = None
         if no_trans:
             diff = state - next_state
         else:
-            pred_trans = self.transition_model(state, action)
+            pred_trans, interation_score = self.transition_model(state, action)
             diff = state + pred_trans - next_state
 
-        return norm * diff.pow(2).sum(2).mean(1)
+        return norm * diff.pow(2).mean(2).mean(1), interation_score
 
     def transition_loss(self, state, action, next_state):
         return self.energy(state, action, next_state).mean()
@@ -116,17 +119,25 @@ class ContrastiveSWM(nn.Module):
         perm = np.random.permutation(batch_size)
         neg_state = state[perm]
 
-        self.pos_loss = self.energy(state, action, next_state)
+        self.pos_loss, interaction_score = self.energy(state, action, next_state)
         zeros = torch.zeros_like(self.pos_loss)
         
         self.pos_loss = self.pos_loss.mean()
-        self.neg_loss = torch.max(
-            zeros, self.hinge - self.energy(
-                state, action, neg_state, no_trans=True)).mean()
+        energy, _ = self.energy(state, action, neg_state, no_trans=True)
+        self.neg_loss = torch.max(zeros, self.hinge - energy).mean()
 
+        metrics = {}
         loss = self.pos_loss + self.neg_loss
+        if interaction_score is not None:
+            interaction_score_mean = interaction_score.mean()
+            interaction_score_loss = self.l1_loss_coef * interaction_score_mean
+            loss += interaction_score_loss
 
-        return loss
+            metrics['interaction_score_mean'] = interaction_score_mean.item()
+            metrics['interaction_score_loss'] = interaction_score_loss.item()
+            metrics['interaction_score_hist'] = torch.histc(interaction_score, bins=self.n_bins, min=0, max=1).detach().cpu().numpy()
+
+        return loss, metrics
 
     def forward(self, obs):
         return self.obj_encoder(self.obj_extractor(obs))
@@ -232,6 +243,7 @@ class TransitionGNN(torch.nn.Module):
 
         edge_attr = None
         edge_index = None
+        interaction_score = None
 
         if num_nodes > 1:
             # edge_index: [B * (num_objects*[num_objects-1]), 2] edge list
@@ -264,6 +276,8 @@ class TransitionGNN(torch.nn.Module):
                 node_attr[row], node_attr[col], edge_attr)
             edge_attr[~interacting_objects_flatten] = 0
 
+            interaction_score = interaction_score.flatten()[self.exclude_diagonal_from_flatten_indices]
+
         if not self.ignore_action:
 
             if self.copy_action:
@@ -282,7 +296,7 @@ class TransitionGNN(torch.nn.Module):
             node_attr, edge_index, edge_attr)
 
         # [batch_size, num_nodes, hidden_dim]
-        return node_attr.view(batch_size, num_nodes, -1)
+        return node_attr.view(batch_size, num_nodes, -1), interaction_score
 
 
 class EncoderCNNSmall(nn.Module):
