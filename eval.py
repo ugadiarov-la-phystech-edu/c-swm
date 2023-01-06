@@ -102,7 +102,7 @@ with torch.no_grad():
 
         pred_state = state
         for i in range(args_eval.num_steps):
-            pred_trans = model.transition_model(pred_state, actions[i])
+            pred_trans, _ = model.transition_model(pred_state, actions[i])
             pred_state = pred_state + pred_trans
 
         pred_states.append(pred_state.cpu())
