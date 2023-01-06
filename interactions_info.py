@@ -200,12 +200,6 @@ for epoch in range(1, args.epochs + 1):
         else:
             loss, metrics = model.contrastive_loss(obs, action, next_obs)
 
-        loss.backward()
-        batch_size = obs.size(0)
-        train_loss += loss.item() * batch_size
-        optimizer.step()
-        n += batch_size
-
         if interaction_score_hist is None:
             interaction_score_hist = metrics['interaction_score_hist']
         else:
@@ -215,9 +209,6 @@ for epoch in range(1, args.epochs + 1):
         n_pairs += k
         interaction_score_mean += metrics['interaction_score_mean'] * k
         interaction_score_loss += metrics['interaction_score_loss'] * k
-
-        if args.decoder:
-            optimizer_dec.step()
 
         if batch_idx % args.log_interval == 0:
             print(
