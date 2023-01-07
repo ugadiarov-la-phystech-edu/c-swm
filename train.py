@@ -183,6 +183,7 @@ for epoch in range(1, args.epochs + 1):
         obs /= args.pixel_scale
         next_obs /= args.pixel_scale
         optimizer.zero_grad()
+        model.transition_model.reset_interaction_statistics()
 
         if args.decoder:
             optimizer_dec.zero_grad()
@@ -230,6 +231,10 @@ for epoch in range(1, args.epochs + 1):
                     loss.item() / len(data_batch[0])))
 
         step += 1
+
+    for index, values in model.transition_model.high_score_interactions.items():
+        values = np.asarray(values)
+        print(f'{index}: avg_score={values.mean()} std_score={values.std()} n={values.shape[0] / n_pairs}')
 
     avg_loss = train_loss / n
     record = {
