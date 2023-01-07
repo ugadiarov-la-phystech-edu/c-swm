@@ -239,6 +239,7 @@ for epoch in range(1, args.epochs + 1):
     for index, values in model.transition_model.high_score_interactions.items():
         values = np.asarray(values)
         fraction = values.shape[0] / n_pairs
+        sum_fraction += fraction
         print(f'{index}: avg_score={values.mean()} std_score={values.std()} fraction={fraction}')
 
     avg_loss = train_loss / n
