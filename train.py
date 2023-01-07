@@ -169,7 +169,10 @@ wandb.init(
 )
 
 for epoch in range(1, args.epochs + 1):
-    model.train()
+    if epoch < args.epochs:
+        model.train()
+    else:
+        model.eval()
     train_loss = 0
     n = 0
     interaction_score_mean = 0
@@ -206,7 +209,8 @@ for epoch in range(1, args.epochs + 1):
         loss.backward()
         batch_size = obs.size(0)
         train_loss += loss.item() * batch_size
-        optimizer.step()
+        if epoch < args.epochs:
+            optimizer.step()
         n += batch_size
 
         if interaction_score_hist is None:
