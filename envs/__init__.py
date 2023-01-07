@@ -29,6 +29,20 @@ register(
 )
 
 register(
+    'ShapesTwoObjects3x3Train-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'width': 3, 'height': 3, 'num_objects': 2, 'num_static_objects': 0, 'num_goals': 0, 'hard_walls': True},
+)
+
+register(
+    'ShapesTwoObjects3x3Eval-v0',
+    entry_point='envs.block_pushing:BlockPushing',
+    max_episode_steps=100,
+    kwargs={'render_type': 'shapes', 'width': 3, 'height': 3, 'num_objects': 2, 'num_static_objects': 0, 'num_goals': 0, 'hard_walls': True}
+)
+
+register(
     'ShapesRandomActionsTrain-v0',
     entry_point='envs.block_pushing:BlockPushing',
     max_episode_steps=100,
