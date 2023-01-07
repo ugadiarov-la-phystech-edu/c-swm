@@ -64,8 +64,6 @@ parser.add_argument('--save-folder', type=str,
 parser.add_argument('--pixel-scale', type=float, default=1., help='Normalize pixel values in observation.')
 parser.add_argument('--shuffle-objects', type=bool, default=False)
 parser.add_argument('--interaction_score_threshold', type=float, required=True)
-parser.add_argument('--project', type=str, required=True)
-parser.add_argument('--run_id', type=str, default='run-0')
 parser.add_argument('--l1_loss_coef', type=float, required=True)
 
 args = parser.parse_args()
