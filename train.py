@@ -235,9 +235,11 @@ for epoch in range(1, args.epochs + 1):
 
         step += 1
 
+    sum_fraction = 0
     for index, values in model.transition_model.high_score_interactions.items():
         values = np.asarray(values)
-        print(f'{index}: avg_score={values.mean()} std_score={values.std()} n={values.shape[0] / n_pairs}')
+        fraction = values.shape[0] / n_pairs
+        print(f'{index}: avg_score={values.mean()} std_score={values.std()} fraction={fraction}')
 
     avg_loss = train_loss / n
     record = {
@@ -259,6 +261,8 @@ for epoch in range(1, args.epochs + 1):
         key = f' interaction_fraction_[{i * delta:.1f};{(i + 1) * delta:.1f}]'
         record[key] = interaction_score_hist[i]
         log_string += f'{key}: {interaction_score_hist[i]:.8f}'
+
+    log_string += f' Check sum_fraction={sum_fraction}'
 
     print(log_string)
     wandb.log(record)
