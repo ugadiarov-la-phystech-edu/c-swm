@@ -150,7 +150,7 @@ for epoch in range(1):
         to_log = False
         for ids, score in zip(high_score_ids, high_scores):
             obs_id = ids[0]
-            if obs_id not in log_info:
+            if 'obs_id' not in log_info or obs_id != log_info['obs_id']:
                 if to_log:
                     print(f'{log_info}')
                     to_log = False
@@ -173,7 +173,7 @@ for object_ids, obs_infos in high_score_obs.items():
         batch_idx = obs_info['batch_idx']
         obs_id = obs_info['obs_id']
         score = obs_info['score']
-        obs = obs_info['obs']
+        obs = np.transpose(obs_info['obs'], axes=(1, 2, 0))
         path = f'{high_score_obs_folder}/batchIdx-{batch_idx}_obsId-{obs_id}_objects-{object_ids}_score-{score:.2f}.png'
         cv.imwrite(path, obs)
 
@@ -182,7 +182,7 @@ for object_ids, obs_infos in low_score_obs.items():
         batch_idx = obs_info['batch_idx']
         obs_id = obs_info['obs_id']
         score = obs_info['score']
-        obs = obs_info['obs']
+        obs = np.transpose(obs_info['obs'], axes=(1, 2, 0))
         path = f'{low_score_obs_folder}/batchIdx-{batch_idx}_obsId-{obs_id}_objects-{object_ids}_score-{score:.2f}.png'
         cv.imwrite(path, obs)
 
