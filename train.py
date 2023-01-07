@@ -186,7 +186,6 @@ for epoch in range(1, args.epochs + 1):
         obs /= args.pixel_scale
         next_obs /= args.pixel_scale
         optimizer.zero_grad()
-        model.transition_model.reset_interaction_statistics()
 
         if args.decoder:
             optimizer_dec.zero_grad()
@@ -249,6 +248,7 @@ for epoch in range(1, args.epochs + 1):
         'interaction_score_loss': interaction_score_loss / n_pairs,
     }
     model.transition_model.reset_statistics()
+    model.transition_model.reset_interaction_statistics()
     log_string = f'====> Epoch: {record["epoch"]} Average loss: {record["loss"]:.8f} Interaction fraction: {record["interaction_fraction"]:.8f}'
     log_string += f' Interaction score: {record["interaction_score_mean"]:.8f} Interaction loss: {record["interaction_score_loss"]:.8f}'
 
