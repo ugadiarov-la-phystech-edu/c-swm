@@ -193,7 +193,7 @@ for epoch in range(1, args.epochs + 1):
             loss = F.binary_cross_entropy(
                 rec, obs, reduction='sum') / obs.size(0)
 
-            next_state_pred = state + model.transition_model(state, action)
+            next_state_pred = state + model.transition_model(state, action)[0]
             next_rec = torch.sigmoid(decoder(next_state_pred))
             next_loss = F.binary_cross_entropy(
                 next_rec, next_obs,

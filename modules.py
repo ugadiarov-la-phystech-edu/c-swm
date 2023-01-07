@@ -98,8 +98,9 @@ class ContrastiveSWM(nn.Module):
         if no_trans:
             diff = state - next_state
         else:
-            pred_trans, interation_score = self.transition_model(state, action)
+            pred_trans, info = self.transition_model(state, action)
             diff = state + pred_trans - next_state
+            interation_score = info['interaction_score']
 
         return norm * diff.pow(2).mean(2).mean(1), interation_score
 
@@ -272,13 +273,11 @@ class TransitionGNN(torch.nn.Module):
             interacting_objects = interaction_score > self.interaction_score_threshold
             interacting_objects_flatten = interacting_objects.flatten()[self.exclude_diagonal_from_flatten_indices]
 
-            high_score_mask = interaction_score * self.exclude_diagonal_from_flatten_indices.reshape(shape=(batch_size, num_nodes, num_nodes)).to('cuda') >= 0.8
+            scores = interaction_score * self.exclude_diagonal_from_flatten_indices.reshape(shape=(batch_size, num_nodes, num_nodes)).to('cuda')
+            scores -= torch.eye(num_nodes, dtype=torch.float32).unsqueeze(0).expand(batch_size, num_nodes, num_nodes).to('cuda')
+            high_score_mask = scores > -1
             high_scores = interaction_score[high_score_mask]
             high_score_ids = high_score_mask.nonzero()
-            for ids, score in zip(high_score_ids, high_scores):
-                i = ids[1].item()
-                j = ids[2].item()
-                self.high_score_interactions[(i, j)].append(score.item())
 
             self.statistics['n_pairs'] += interacting_objects_flatten.size(0)
             self.statistics['n_interactions'] += interacting_objects_flatten.sum()
@@ -308,7 +307,7 @@ class TransitionGNN(torch.nn.Module):
             node_attr, edge_index, edge_attr)
 
         # [batch_size, num_nodes, hidden_dim]
-        return node_attr.view(batch_size, num_nodes, -1), interaction_score
+        return node_attr.view(batch_size, num_nodes, -1), {'interaction_score': interaction_score, 'high_score_ids': high_score_ids, 'high_scores': high_scores}
 
 
 class EncoderCNNSmall(nn.Module):

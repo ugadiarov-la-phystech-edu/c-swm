@@ -1,19 +1,18 @@
 import argparse
-import sys
+import collections
 
 import torch
 import utils
 import datetime
 import os
-import pickle
 
 import numpy as np
 import logging
 
 from torch.utils import data
-import torch.nn.functional as F
 
 import modules
+import cv2 as cv
 
 
 parser = argparse.ArgumentParser()
@@ -87,9 +86,14 @@ if args.cuda:
 
 exp_counter = 0
 save_folder = '{}/{}/'.format(args.save_folder, exp_name)
+high_score_obs_folder = save_folder + '/high_score'
+low_score_obs_folder = save_folder + '/low_score'
 
 if not os.path.exists(save_folder):
     os.makedirs(save_folder)
+os.makedirs(high_score_obs_folder, exist_ok=True)
+os.makedirs(low_score_obs_folder, exist_ok=True)
+
 meta_file = os.path.join(save_folder, 'metadata.pkl')
 model_file = os.path.join(save_folder, 'model.pt')
 log_file = os.path.join(save_folder, 'log.txt')
@@ -99,14 +103,12 @@ logger = logging.getLogger()
 logger.addHandler(logging.FileHandler(log_file, 'a'))
 print = logger.info
 
-pickle.dump({'args': args}, open(meta_file, "wb"))
-
 device = torch.device('cuda' if args.cuda else 'cpu')
 
 dataset = utils.StateTransitionsDataset(
     hdf5_file=args.dataset)
 train_loader = data.DataLoader(
-    dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
+    dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
 # Get data sample
 obs = train_loader.__iter__().next()[0]
@@ -127,103 +129,39 @@ model = modules.ContrastiveSWM(
     l1_loss_coef=args.l1_loss_coef,
 ).to(device)
 
-model.apply(utils.weights_init)
-
 model.load_state_dict(torch.load(model_file))
 model.eval()
 
+high_score_obs = collections.defaultdict(list)
+low_score_obs = collections.defaultdict(list)
 
-optimizer = torch.optim.Adam(
-    model.parameters(),
-    lr=args.learning_rate)
-
-if args.decoder:
-    if args.encoder == 'large':
-        decoder = modules.DecoderCNNLarge(
-            input_dim=args.embedding_dim,
-            num_objects=args.num_objects,
-            hidden_dim=args.hidden_dim // 16,
-            output_size=input_shape).to(device)
-    elif args.encoder == 'medium':
-        decoder = modules.DecoderCNNMedium(
-            input_dim=args.embedding_dim,
-            num_objects=args.num_objects,
-            hidden_dim=args.hidden_dim // 16,
-            output_size=input_shape).to(device)
-    elif args.encoder == 'small':
-        decoder = modules.DecoderCNNSmall(
-            input_dim=args.embedding_dim,
-            num_objects=args.num_objects,
-            hidden_dim=args.hidden_dim // 16,
-            output_size=input_shape).to(device)
-    decoder.apply(utils.weights_init)
-    optimizer_dec = torch.optim.Adam(
-        decoder.parameters(),
-        lr=args.learning_rate)
-
-
-# Train model.
-print('Starting model training...')
-step = 0
-best_loss = 1e9
-
-for epoch in range(1, args.epochs + 1):
-    train_loss = 0
-    n = 0
-    interaction_score_mean = 0
-    interaction_score_loss = 0
-    interaction_score_hist = None
-    n_pairs = 0
-
+for epoch in range(1):
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = [tensor.to(device) for tensor in data_batch]
         obs, action, next_obs = data_batch
         obs /= args.pixel_scale
         next_obs /= args.pixel_scale
-        optimizer.zero_grad()
 
-        if args.decoder:
-            optimizer_dec.zero_grad()
-            objs = model.obj_extractor(obs)
-            state = model.obj_encoder(objs)
+        objs = model.obj_extractor(obs)
+        state = model.obj_encoder(objs)
+        pred_transition, info = model.transition_model(state, action)
+        high_score_ids = info['high_score_ids'].detach().cpu().numpy()
+        high_scores = info['high_scores'].detach().cpu().numpy()
 
-            rec = torch.sigmoid(decoder(state))
-            loss = F.binary_cross_entropy(
-                rec, obs, reduction='sum') / obs.size(0)
+        for ids, score in zip(high_score_ids, high_scores):
+            obs_id = ids[0]
+            object_ids = ids[1:]
+            object_ids = (min(object_ids), max(object_ids))
+            if score > 0.9 and len(high_score_obs[object_ids]) < 10:
+                high_score_obs[object_ids].append({'score': score, 'obs': (obs[obs_id].cpu().numpy() * args.pixel_scale).astype(np.uint8)})
+            elif score < 0.1:
+                low_score_obs[object_ids].append({'score': score, 'obs': (obs[obs_id].cpu().numpy() * args.pixel_scale).astype(np.uint8)})
 
-            next_state_pred = state + model.transition_model(state, action)
-            next_rec = torch.sigmoid(decoder(next_state_pred))
-            next_loss = F.binary_cross_entropy(
-                next_rec, next_obs,
-                reduction='sum') / obs.size(0)
-            loss += next_loss
-        else:
-            loss, metrics = model.contrastive_loss(obs, action, next_obs)
+for object_ids, values in high_score_obs.items():
+    path = f'{high_score_obs_folder}/{object_ids}_{values[0]}.png'
+    cv.imwrite(path, values[1])
 
-        if interaction_score_hist is None:
-            interaction_score_hist = metrics['interaction_score_hist']
-        else:
-            interaction_score_hist += metrics['interaction_score_hist']
+for object_ids, values in low_score_obs.items():
+    path = f'{low_score_obs_folder}/{object_ids}_{values[0]}.png'
+    cv.imwrite(path, values[1])
 
-        k = metrics['interaction_score_hist'].sum()
-        n_pairs += k
-        interaction_score_mean += metrics['interaction_score_mean'] * k
-        interaction_score_loss += metrics['interaction_score_loss'] * k
-
-        if batch_idx % args.log_interval == 0:
-            print(
-                'Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.8f}'.format(
-                    epoch, batch_idx * len(data_batch[0]),
-                    len(train_loader.dataset),
-                    100. * batch_idx / len(train_loader),
-                    loss.item() / len(data_batch[0])))
-
-        step += 1
-
-    for index, values in model.transition_model.high_score_interactions.items():
-        values = np.asarray(values)
-        print(f'{index}: avg_score={values.mean()} std_score={values.std()} n={values.shape[0] / n_pairs}')
-
-    print(f'n_pairs={n_pairs}')
-
-    sys.exit(0)
