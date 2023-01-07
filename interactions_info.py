@@ -148,20 +148,43 @@ for epoch in range(1):
         high_score_ids = info['high_score_ids'].detach().cpu().numpy()
         high_scores = info['high_scores'].detach().cpu().numpy()
 
+        log_info = {}
+        to_log = False
         for ids, score in zip(high_score_ids, high_scores):
             obs_id = ids[0]
-            object_ids = ids[1:]
-            object_ids = (min(object_ids), max(object_ids))
+            if obs_id not in log_info:
+                if to_log:
+                    print(f'{log_info}')
+                    to_log = False
+                log_info = {'obs_id': obs_id}
+
+            object_ids = (ids[1], ids[2])
+            if object_ids[0] > object_ids[1]:
+                continue
+
+            log_info[object_ids] = score
             if score > 0.9 and len(high_score_obs[object_ids]) < 10:
-                high_score_obs[object_ids].append({'score': score, 'obs': (obs[obs_id].cpu().numpy() * args.pixel_scale).astype(np.uint8)})
-            elif score < 0.1:
-                low_score_obs[object_ids].append({'score': score, 'obs': (obs[obs_id].cpu().numpy() * args.pixel_scale).astype(np.uint8)})
+                high_score_obs[object_ids].append({'score': score, 'obs': (obs[obs_id].cpu().numpy() * args.pixel_scale).astype(np.uint8), 'batch_idx': batch_idx, 'obs_id': obs_id})
+                to_log = True
+            elif score < 0.1 and len(low_score_obs[object_ids]) < 10:
+                low_score_obs[object_ids].append({'score': score, 'obs': (obs[obs_id].cpu().numpy() * args.pixel_scale).astype(np.uint8), 'batch_idx': batch_idx, 'obs_id': obs_id})
+                to_log = True
 
-for object_ids, values in high_score_obs.items():
-    path = f'{high_score_obs_folder}/{object_ids}_{values[0]}.png'
-    cv.imwrite(path, values[1])
+for object_ids, obs_infos in high_score_obs.items():
+    for obs_info in obs_infos:
+        batch_idx = obs_info['batch_idx']
+        obs_id = obs_info['obs_id']
+        score = obs_info['score']
+        obs = obs_info['obs']
+        path = f'{high_score_obs_folder}/batchIdx-{batch_idx}_obsId-{obs_id}_objects-{object_ids}_score-{score:.2f}.png'
+        cv.imwrite(path, obs)
 
-for object_ids, values in low_score_obs.items():
-    path = f'{low_score_obs_folder}/{object_ids}_{values[0]}.png'
-    cv.imwrite(path, values[1])
+for object_ids, obs_infos in low_score_obs.items():
+    for obs_info in obs_infos:
+        batch_idx = obs_info['batch_idx']
+        obs_id = obs_info['obs_id']
+        score = obs_info['score']
+        obs = obs_info['obs']
+        path = f'{low_score_obs_folder}/batchIdx-{batch_idx}_obsId-{obs_id}_objects-{object_ids}_score-{score:.2f}.png'
+        cv.imwrite(path, obs)
 
