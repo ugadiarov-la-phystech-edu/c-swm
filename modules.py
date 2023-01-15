@@ -1,9 +1,12 @@
+import collections
+
 import utils
 
 import numpy as np
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 
 class ContrastiveSWM(nn.Module):
@@ -34,6 +37,7 @@ class ContrastiveSWM(nn.Module):
         
         self.pos_loss = 0
         self.neg_loss = 0
+        self.bisimulation_loss = 0
 
         num_channels = input_dims[0]
         width_height = input_dims[1:]
@@ -85,23 +89,19 @@ class ContrastiveSWM(nn.Module):
         self.width = width_height[0]
         self.height = width_height[1]
 
-    def energy(self, state, action, next_state, no_trans=False):
+    def energy(self, state, other_state):
         """Energy function based on normalized squared L2 norm."""
 
-        norm = 0.5 / (self.sigma**2)
+        norm = 0.5 / (self.sigma ** 2)
+        diff = state - other_state
 
-        if no_trans:
-            diff = state - next_state
-        else:
-            pred_trans = self.transition_model(state, action)
-            diff = state + pred_trans - next_state
-
-        return norm * diff.pow(2).sum(2).mean(1)
+        return norm * diff.pow(2).mean(2).mean(1)
 
     def transition_loss(self, state, action, next_state):
-        return self.energy(state, action, next_state).mean()
+        pred_trans = self.transition_model(state, action)
+        return self.energy(state + pred_trans, next_state).mean()
 
-    def contrastive_loss(self, obs, action, next_obs):
+    def contrastive_bisimulation_loss(self, obs, action, next_obs, reward, contrastive_coef, bisimulation_coef, gamma):
 
         objs = self.obj_extractor(obs)
         next_objs = self.obj_extractor(next_obs)
@@ -109,22 +109,40 @@ class ContrastiveSWM(nn.Module):
         state = self.obj_encoder(objs)
         next_state = self.obj_encoder(next_objs)
 
+        pred_next_state = state + self.transition_model(state, action)
+        self.pos_loss = self.energy(pred_next_state, next_state).mean()
+
         # Sample negative state across episodes at random
         batch_size = state.size(0)
         perm = np.random.permutation(batch_size)
         neg_state = state[perm]
 
-        self.pos_loss = self.energy(state, action, next_state)
         zeros = torch.zeros_like(self.pos_loss)
-        
-        self.pos_loss = self.pos_loss.mean()
-        self.neg_loss = torch.max(
-            zeros, self.hinge - self.energy(
-                state, action, neg_state, no_trans=True)).mean()
+        self.neg_loss = torch.max(zeros, self.hinge - self.energy(state, neg_state)).mean()
 
-        loss = self.pos_loss + self.neg_loss
+        loss = self.pos_loss + contrastive_coef * self.neg_loss
 
-        return loss
+        neg_action = action[perm]
+        pred_next_neg_state = neg_state + self.transition_model(neg_state, neg_action)
+        neg_reward = reward[perm]
+
+        state_distance = F.smooth_l1_loss(state, neg_state, reduction='none')
+        pred_next_state_distance = F.smooth_l1_loss(pred_next_state, pred_next_neg_state, reduction='none')
+        reward_distance = F.smooth_l1_loss(reward, neg_reward, reduction='none')
+        self.bisimulation_loss = torch.pow(
+            torch.flatten(state_distance - gamma * pred_next_state_distance, start_dim=1).mean(dim=1) - reward_distance,
+            2).mean()
+
+        loss += bisimulation_coef * self.bisimulation_loss
+
+        return loss, collections.Counter({'loss': loss.item(), 'transition_loss': self.pos_loss.item(),
+                                          'contrastive_loss': self.neg_loss.item(),
+                                          'bisimulation_loss': self.bisimulation_loss.item(),
+                                          'state_distance': state_distance.mean().item(),
+                                          'pred_next_state_distance': pred_next_state_distance.mean().item(),
+                                          'reward_distance': reward_distance.mean().item(),
+                                          'contrastive_loss_contribution': contrastive_coef * self.neg_loss.item(),
+                                          'bisimulation_loss_contribution': bisimulation_coef * self.bisimulation_loss.item()})
 
     def forward(self, obs):
         return self.obj_encoder(self.obj_extractor(obs))

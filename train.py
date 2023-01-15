@@ -1,4 +1,6 @@
 import argparse
+import collections
+
 import torch
 import utils
 import datetime
@@ -66,6 +68,9 @@ parser.add_argument('--shuffle-objects', type=bool, default=False)
 parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
 parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
+parser.add_argument('--contrastive_coef', type=float, required=True)
+parser.add_argument('--bisimulation_coef', type=float, required=True)
+parser.add_argument('--gamma', type=float, required=True)
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -159,6 +164,9 @@ if args.decoder:
 print('Starting model training...')
 step = 0
 best_loss = 1e9
+contrastive_coef = args.contrastive_coef
+bisimulation_coef = args.bisimulation_coef
+gamma = args.gamma
 
 wandb.init(
     project=args.project,
@@ -168,8 +176,9 @@ wandb.init(
 
 for epoch in range(1, args.epochs + 1):
     model.train()
-    train_loss = 0
     n = 0
+
+    epoch_metrics = collections.Counter()
 
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = [tensor.to(device) for tensor in data_batch]
@@ -194,10 +203,10 @@ for epoch in range(1, args.epochs + 1):
                 reduction='sum') / obs.size(0)
             loss += next_loss
         else:
-            loss = model.contrastive_loss(obs, action, next_obs)
+            loss, metrics = model.contrastive_bisimulation_loss(obs, action, next_obs, reward, contrastive_coef, bisimulation_coef, gamma)
+            epoch_metrics += metrics
 
         loss.backward()
-        train_loss += loss.item()
         optimizer.step()
         n += obs.size(0)
 
@@ -214,11 +223,13 @@ for epoch in range(1, args.epochs + 1):
 
         step += 1
 
-    avg_loss = train_loss / n
+    epoch_metrics = {key: value / n for key, value in epoch_metrics.items()}
+    epoch_metrics['epoch'] = epoch
+    avg_loss = epoch_metrics['loss']
     print('====> Epoch: {} Average loss: {:.8f}'.format(
         epoch, avg_loss))
 
-    wandb.log({'epoch': epoch, 'loss': avg_loss})
+    wandb.log(epoch_metrics)
 
     if avg_loss < best_loss:
         best_loss = avg_loss
