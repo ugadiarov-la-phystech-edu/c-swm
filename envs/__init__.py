@@ -172,14 +172,32 @@ register(
     'PushShapesHardWallsTrain-v0',
     entry_point='envs.push:Push',
     max_episode_steps=75,
-    kwargs={'observation_type': 'shapes', 'hard_walls': True, 'n_boxes': 5, 'n_goals': 1, 'n_static_boxes': 0, 'static_goals': True},
+    kwargs={
+        'observation_type': 'shapes',
+        'hard_walls': True,
+        'n_boxes': 5,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'static_goals': True,
+        'width': 5,
+        'render_scale': 10,
+    },
 )
 
 register(
     'PushShapesHardWallsEval-v0',
     entry_point='envs.push:Push',
     max_episode_steps=75,
-    kwargs={'observation_type': 'shapes', 'hard_walls': True, 'n_boxes': 5, 'n_goals': 1, 'n_static_boxes': 0, 'static_goals': True},
+    kwargs={
+        'observation_type': 'shapes',
+        'hard_walls': True,
+        'n_boxes': 5,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'static_goals': True,
+        'width': 5,
+        'render_scale': 10,
+    },
 )
 
 register(
