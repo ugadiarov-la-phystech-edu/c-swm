@@ -90,6 +90,7 @@ if __name__ == '__main__':
             'obs': [],
             'action': [],
             'next_obs': [],
+            'reward': []
         })
 
         ob = env.reset()
@@ -115,8 +116,10 @@ if __name__ == '__main__':
                 replay_buffer[i]['action'].append(action)
                 replay_buffer[i]['next_obs'].append(
                     np.concatenate((ob, prev_ob), axis=0))
+                replay_buffer[i]['reward'].append(reward)
 
                 if done:
+                    lengths.append(len(replay_buffer[i]['action']))
                     break
         else:
 
@@ -128,6 +131,7 @@ if __name__ == '__main__':
 
                 replay_buffer[i]['action'].append(action)
                 replay_buffer[i]['next_obs'].append(ob[1])
+                replay_buffer[i]['reward'].append(reward)
 
                 if done:
                     lengths.append(len(replay_buffer[i]['action']))
