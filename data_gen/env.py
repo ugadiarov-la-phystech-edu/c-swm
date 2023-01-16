@@ -67,8 +67,8 @@ if __name__ == '__main__':
     env.seed(args.seed)
 
     if args.ad_hoc_agent == 'True':
-        assert isinstance(env, Push)
-        agent = AdHocPushAgent(env.unwrapped)
+        assert isinstance(env.unwrapped, Push)
+        agent = AdHocPushAgent(env)
     else:
         agent = RandomAgent(env.action_space)
 
