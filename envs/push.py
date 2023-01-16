@@ -1,3 +1,5 @@
+import random
+
 import gym
 import numpy as np
 import skimage
@@ -118,7 +120,7 @@ class Push(gym.Env):
         if self.embodied_agent:
             assert self.n_boxes > len(self.goal_ids) + len(self.static_box_ids)
 
-        self.n_boxes_in_game = self.n_boxes - len(self.goal_ids) - len(self.static_box_ids) - self.embodied_agent
+        self.n_boxes_in_game = None
         self.static_goals = static_goals
         self.render_scale = render_scale
         self.hard_walls = hard_walls
@@ -133,6 +135,7 @@ class Push(gym.Env):
             2: np.asarray((-1, 0)),
             3: np.asarray((0, 1))
         }
+        self.direction2action = {(1, 0): 0, (0, -1): 1, (-1, 0): 2, (0, 1): 3}
 
         self.np_random = None
 
@@ -200,6 +203,7 @@ class Push(gym.Env):
 
         self.state = state
         self.steps_taken = 0
+        self.n_boxes_in_game = self.n_boxes - len(self.goal_ids) - len(self.static_box_ids) - self.embodied_agent
 
         return self._get_observation()
 
@@ -412,6 +416,35 @@ class Push(gym.Env):
 
         im *= 255
         return im.astype(np.uint8)
+
+
+class AdHocPushAgent:
+    def __init__(self, env: Push):
+        self.env = None
+        self.set_env(env)
+
+    def set_env(self, env: Push):
+        self.env = env
+        assert not env.embodied_agent
+        assert env.static_goals
+        assert len(env.goal_ids) == 1
+        assert len(env.static_box_ids) == 0
+
+    def act(self, observation, reward, done):
+        if random.random() > 0.5:
+            return self.env.action_space.sample()
+
+        box_pos_in_game = [(idx, box_pos) for idx, box_pos in enumerate(self.env.box_pos)
+                           if idx not in self.env.goal_ids and idx not in self.env.static_box_ids and box_pos[0] != -1]
+        idx, box_pos = random.choice(box_pos_in_game)
+        goal_pos = self.env.box_pos[next(iter(self.env.goal_ids))]
+        delta = goal_pos - box_pos
+        if np.abs(delta)[0] >= np.abs(delta)[1]:
+            direction = (int(delta[0] > 0) * 2 - 1, 0)
+        else:
+            direction = (0, int(delta[1] > 0) * 2 - 1)
+
+        return idx * 4 + self.env.direction2action[direction]
 
 
 if __name__ == "__main__":
