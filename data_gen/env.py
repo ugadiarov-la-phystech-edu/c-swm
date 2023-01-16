@@ -8,11 +8,10 @@ experience in a replay buffer.
 import sys
 from pathlib import Path
 
-from envs.push import AdHocPushAgent, Push
-
 if str(Path.cwd()) not in sys.path:
     sys.path.insert(0, str(Path.cwd()))
 
+from envs.push import AdHocPushAgent, Push
 import argparse
 
 # noinspection PyUnresolvedReferences
