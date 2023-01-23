@@ -204,7 +204,7 @@ for epoch in range(1, args.epochs + 1):
             loss += next_loss
         else:
             loss, metrics = model.contrastive_bisimulation_loss(obs, action, next_obs, reward, contrastive_coef, bisimulation_coef, gamma)
-            epoch_metrics += metrics
+            epoch_metrics += {key: value * obs.size(0) for key, value in metrics.items()}
 
         loss.backward()
         optimizer.step()

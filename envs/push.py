@@ -1,3 +1,4 @@
+import collections
 import random
 
 import gym
@@ -99,6 +100,7 @@ class Push(gym.Env):
     def __init__(self, mode='default', n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, width=10,
                  embodied_agent=False, return_state=True, observation_type='squares', max_episode_steps=75,
                  hard_walls=False, channels_first=True, seed=None, render_scale=5):
+        assert not embodied_agent, 'Embodied agent is not supported yet.'
         self.w = width
         self.step_limit = max_episode_steps
         self.n_boxes = n_boxes
@@ -244,17 +246,17 @@ class Push(gym.Env):
         box_type = self._get_type(box_id)
 
         done = False
-        reward = -0.01
+        reward = CompositeReward(num_objects=self.action_space.n // 4)
 
-        if self._is_free_cell(box_old_pos):
+        if not self.is_in_grid(box_old_pos):
             # This box is out of the game. There is nothing to do.
             pass
         elif not self.is_in_grid(box_new_pos):
-            reward += -0.1
+            reward.add(-0.1, box_id)
             if not self.hard_walls:
                 # push out of grid, destroy box or finish episode if an agent is out of the grid
                 if self.embodied_agent:
-                    reward -= 1
+                    reward.add(-1, box_id)
                     done = True
                 else:
                     self._destroy_box(box_id)
@@ -265,57 +267,66 @@ class Push(gym.Env):
 
             if box_type == self.BOX:
                 if another_box_type == self.BOX:
-                    another_box_new_pos = box_new_pos + vec
-                    if self.is_in_grid(another_box_new_pos):
-                        if self._is_free_cell(another_box_new_pos):
-                            self._move(another_box_id, another_box_new_pos)
-                            self._move(box_id, box_new_pos)
-                        elif self._get_type(self._get_occupied_box_id(another_box_new_pos)) == self.GOAL:
-                            reward += 1
-                            self._destroy_box(another_box_id)
-                            self._move(box_id, box_new_pos)
-                        else:
-                            reward += -0.1
-                    else:
-                        reward += -0.1
-                        if not self.hard_walls:
-                            self._destroy_box(another_box_id)
-                            self._move(box_id, box_new_pos)
+                    reward.add(-0.1, box_id, another_box_id)
+                    # Ternary interactions
+                    # another_box_new_pos = box_new_pos + vec
+                    # if self.is_in_grid(another_box_new_pos):
+                    #     if self._is_free_cell(another_box_new_pos):
+                    #         self._move(another_box_id, another_box_new_pos)
+                    #         self._move(box_id, box_new_pos)
+                    #     elif self._get_type(self._get_occupied_box_id(another_box_new_pos)) == self.GOAL:
+                    #         reward += 1
+                    #         self._destroy_box(another_box_id)
+                    #         self._move(box_id, box_new_pos)
+                    #     else:
+                    #         reward += -0.1
+                    # else:
+                    #     reward += -0.1
+                    #     if not self.hard_walls:
+                    #         self._destroy_box(another_box_id)
+                    #         self._move(box_id, box_new_pos)
                 elif another_box_type == self.GOAL:
                     if self.embodied_agent:
-                        another_box_new_pos = box_new_pos + vec
-                        if self.is_in_grid(another_box_new_pos):
-                            if self._is_free_cell(another_box_new_pos):
-                                self._move(another_box_id, another_box_new_pos)
-                                self._move(box_id, box_new_pos)
-                            elif self._get_type(self._get_occupied_box_id(another_box_new_pos)) == self.GOAL:
-                                reward += -0.1
-                            else:
-                                assert self._get_type(self._get_occupied_box_id(another_box_new_pos)) in (self.BOX, self.STATIC_BOX)
-                                reward += 1
-                                self._destroy_box(self._get_occupied_box_id(another_box_new_pos))
-                                self._move(another_box_id, another_box_new_pos)
-                                self._move(box_id, box_new_pos)
-                        else:
-                            reward += -0.1
-                            if not self.hard_walls:
-                                reward -= 1
-                                self._destroy_box(another_box_id)
-                                self._move(box_id, box_new_pos)
+                        # Ternary interactions
+                        # another_box_new_pos = box_new_pos + vec
+                        # if self.is_in_grid(another_box_new_pos):
+                        #     if self._is_free_cell(another_box_new_pos):
+                        #         self._move(another_box_id, another_box_new_pos)
+                        #         self._move(box_id, box_new_pos)
+                        #     elif self._get_type(self._get_occupied_box_id(another_box_new_pos)) == self.GOAL:
+                        #         reward += -0.1
+                        #     else:
+                        #         assert self._get_type(self._get_occupied_box_id(another_box_new_pos)) in (self.BOX, self.STATIC_BOX)
+                        #         reward += 1
+                        #         self._destroy_box(self._get_occupied_box_id(another_box_new_pos))
+                        #         self._move(another_box_id, another_box_new_pos)
+                        #         self._move(box_id, box_new_pos)
+                        # else:
+                        #     reward += -0.1
+                        #     if not self.hard_walls:
+                        #         reward -= 1
+                        #         self._destroy_box(another_box_id)
+                        #         self._move(box_id, box_new_pos)
+                        pass
                     else:
-                        reward += 1
+                        reward.add(1, box_id)
                         self._destroy_box(box_id)
                 else:
                     assert box_type == self.STATIC_BOX
-                    reward += -0.1
+                    reward.add(-0.1, box_id)
             elif box_type == self.GOAL:
                 if another_box_type in (self.BOX, self.STATIC_BOX):
                     self._destroy_box(another_box_id)
                     self._move(box_id, box_new_pos)
-                    reward += 1
+                    if another_box_type == self.BOX:
+                        reward.add(1, box_id, another_box_id)
+                    elif another_box_type == self.STATIC_BOX:
+                        reward.add(1, box_id)
+                    else:
+                        raise ValueError(f'Unexpected box_type:{another_box_type}.')
                 else:
                     assert another_box_type == self.GOAL
-                    reward += -0.1
+                    reward.add(-0.1, box_id, another_box_id)
             else:
                 assert False, f'Cannot move a box of type:{box_type}'
         else:
@@ -329,7 +340,7 @@ class Push(gym.Env):
         if self.n_boxes_in_game == 0:
             done = True
 
-        return self._get_observation(), reward, done, {}
+        return self._get_observation(), reward.total_reward(), done, {'composite_reward': reward.to_numpy()}
 
     def is_in_grid(self, point):
         return (0 <= point[0] < self.w) and (0 <= point[1] < self.w)
@@ -447,13 +458,46 @@ class AdHocPushAgent:
         return idx * 4 + self.env.direction2action[direction]
 
 
+class CompositeReward:
+    def __init__(self, num_objects):
+        self.num_objects = num_objects
+        self.composite_reward_shape = (self.num_objects + self.num_objects * (self.num_objects - 1) // 2,)
+        self._reward_dict = collections.defaultdict(float)
+
+    def add(self, reward, *interacting_object_ids):
+        self._reward_dict[tuple(sorted(interacting_object_ids))] += reward
+
+    def total_reward(self):
+        return float(sum(interaction_reward for _, interaction_reward in self._reward_dict.items()))
+
+    def collected_rewards(self):
+        return dict(self._reward_dict)
+
+    def to_numpy(self):
+        composite_reward = np.zeros(shape=self.composite_reward_shape, dtype=np.float32)
+        for interacting_object_ids, interaction_reward in self._reward_dict.items():
+            if len(interacting_object_ids) == 1:
+                # First self.num_objects elements are single-object rewards
+                idx = interacting_object_ids[0]
+            elif len(interacting_object_ids) == 2:
+                # Pair-wise rewards with objects ids (i, j): i < j
+                idx = (self.num_objects - 1) * (interacting_object_ids[0] + 1) \
+                      - (interacting_object_ids[0] + 1) * interacting_object_ids[0] // 2 + interacting_object_ids[1]
+            else:
+                raise ValueError(f'Only pair-wise rewards are supported currently.')
+
+            composite_reward[idx] = interaction_reward
+
+        return composite_reward
+
+
 if __name__ == "__main__":
     """
     If called directly with argument "random", evaluates the average return of a random policy.
     If called without arguments, starts an interactive game played with wasd to move, q to quit.
     """
     env = Push(n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, observation_type='shapes', hard_walls=True,
-               channels_first=False, width=5, embodied_agent=True, render_scale=10)
+               channels_first=False, width=5, embodied_agent=False, render_scale=10)
 
     if len(sys.argv) > 1 and sys.argv[1] == "random":
         all_r = []
@@ -499,9 +543,9 @@ if __name__ == "__main__":
 
             a += 4 * obj_id
 
-            s, r, d, _ = env.step(a)
+            s, r, d, info = env.step(a)
             episode_r += r
-            env.print(f'. Reward: {episode_r}')
+            env.print(f'. Cumulative reward: {episode_r}. Info: {info}.')
             plt.imshow(s[1])
             plt.show()
             if d or key == "r":
@@ -509,3 +553,5 @@ if __name__ == "__main__":
                 s = env.reset()
                 episode_r = 0
                 env.print()
+                plt.imshow(s[1])
+                plt.show()

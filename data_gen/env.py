@@ -97,7 +97,7 @@ if __name__ == '__main__':
             'obs': [],
             'action': [],
             'next_obs': [],
-            'reward': []
+            'composite_reward': [],
         })
 
         ob = env.reset()
@@ -117,13 +117,12 @@ if __name__ == '__main__':
                 prev_ob = ob
 
                 action = agent.act(ob, reward, done)
-                ob, reward, done, _ = env.step(action)
+                ob, reward, done, info = env.step(action)
                 ob = crop_normalize(ob, crop)
 
                 replay_buffer[i]['action'].append(action)
                 replay_buffer[i]['next_obs'].append(
                     np.concatenate((ob, prev_ob), axis=0))
-                replay_buffer[i]['reward'].append(reward)
 
                 if done:
                     lengths.append(len(replay_buffer[i]['action']))
@@ -134,11 +133,11 @@ if __name__ == '__main__':
                 replay_buffer[i]['obs'].append(ob[1])
 
                 action = agent.act(ob, reward, done)
-                ob, reward, done, _ = env.step(action)
+                ob, reward, done, info = env.step(action)
 
                 replay_buffer[i]['action'].append(action)
                 replay_buffer[i]['next_obs'].append(ob[1])
-                replay_buffer[i]['reward'].append(reward)
+                replay_buffer[i]['composite_reward'].append(info['composite_reward'])
 
                 if done:
                     lengths.append(len(replay_buffer[i]['action']))
@@ -154,4 +153,3 @@ if __name__ == '__main__':
 
     # Save replay buffer to disk.
     utils.save_list_dict_h5py(replay_buffer, args.fname)
-

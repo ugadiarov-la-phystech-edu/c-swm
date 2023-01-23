@@ -88,6 +88,10 @@ class ContrastiveSWM(nn.Module):
 
         self.width = width_height[0]
         self.height = width_height[1]
+        self.pairwise_indices = torch.combinations(torch.arange(start=0, end=self.num_objects)).to('cuda')
+
+    def pairwise(self, state):
+        return state[:, self.pairwise_indices, ...].reshape(shape=(state.size(0), self.pairwise_indices.size(0), -1))
 
     def energy(self, state, other_state):
         """Energy function based on normalized squared L2 norm."""
@@ -126,21 +130,41 @@ class ContrastiveSWM(nn.Module):
         pred_next_neg_state = neg_state + self.transition_model(neg_state, neg_action)
         neg_reward = reward[perm]
 
-        state_distance = F.smooth_l1_loss(state, neg_state, reduction='none')
-        pred_next_state_distance = F.smooth_l1_loss(pred_next_state, pred_next_neg_state, reduction='none')
-        reward_distance = F.smooth_l1_loss(reward, neg_reward, reduction='none')
-        self.bisimulation_loss = torch.pow(
-            torch.flatten(state_distance - gamma * pred_next_state_distance, start_dim=1).mean(dim=1) - reward_distance,
-            2).mean()
+        # Single-object bisimulation
+        state_distance = F.smooth_l1_loss(state, neg_state, reduction='none').mean(-1)
+        pred_next_state_distance = F.smooth_l1_loss(pred_next_state, pred_next_neg_state, reduction='none').mean(-1)
+        single_object_reward_distance = F.smooth_l1_loss(
+            reward[:, :self.num_objects], neg_reward[:, :self.num_objects], reduction='none'
+        )
+        single_object_bisimulation_loss = \
+            torch.pow(state_distance - gamma * pred_next_state_distance - single_object_reward_distance, 2).mean()
+
+        # Pair-wise bisibulation
+        pairwise_state_distance = \
+            F.smooth_l1_loss(self.pairwise(state), self.pairwise(neg_state), reduction='none').mean(-1)
+        pairwise_pred_next_state_distance = \
+            F.smooth_l1_loss(self.pairwise(pred_next_state), self.pairwise(pred_next_neg_state), reduction='none').mean(-1)
+        pairwise_reward_distance = F.smooth_l1_loss(
+            reward[:, self.num_objects:], neg_reward[:, self.num_objects:], reduction='none'
+        )
+        pairwise_bisimulation_loss = \
+            torch.pow(pairwise_state_distance - gamma * pairwise_pred_next_state_distance - pairwise_reward_distance, 2).mean()
+
+        self.bisimulation_loss = single_object_bisimulation_loss + pairwise_bisimulation_loss
 
         loss += bisimulation_coef * self.bisimulation_loss
 
         return loss, collections.Counter({'loss': loss.item(), 'transition_loss': self.pos_loss.item(),
                                           'contrastive_loss': self.neg_loss.item(),
                                           'bisimulation_loss': self.bisimulation_loss.item(),
-                                          'state_distance': state_distance.mean().item(),
-                                          'pred_next_state_distance': pred_next_state_distance.mean().item(),
-                                          'reward_distance': reward_distance.mean().item(),
+                                          'single_object_bisimulation_loss': single_object_bisimulation_loss.item(),
+                                          'pairwise_bisimulation_loss': pairwise_bisimulation_loss.item(),
+                                          'single_state_distance': state_distance.mean().item(),
+                                          'single_pred_next_state_distance': pred_next_state_distance.mean().item(),
+                                          'pairwise_state_distance': pairwise_state_distance.mean().item(),
+                                          'pairwise_next_state_distance': pairwise_pred_next_state_distance.mean().item(),
+                                          'single_object_reward_distance': single_object_reward_distance.mean().item(),
+                                          'pairwise_reward_distance': pairwise_reward_distance.mean().item(),
                                           'contrastive_loss_contribution': contrastive_coef * self.neg_loss.item(),
                                           'bisimulation_loss_contribution': bisimulation_coef * self.bisimulation_loss.item()})
 
