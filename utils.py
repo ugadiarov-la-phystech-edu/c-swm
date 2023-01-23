@@ -156,8 +156,9 @@ class StateTransitionsDataset(data.Dataset):
         obs = to_float(self.experience_buffer[ep]['obs'][step])
         action = self.experience_buffer[ep]['action'][step]
         next_obs = to_float(self.experience_buffer[ep]['next_obs'][step])
+        pairwise_distances = to_float(self.experience_buffer[ep]['pairwise_distances'][step])
 
-        return obs, action, next_obs
+        return obs, action, next_obs, pairwise_distances
 
 
 class PathDataset(data.Dataset):

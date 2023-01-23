@@ -7,9 +7,11 @@ experience in a replay buffer.
 # Get env directory
 import sys
 from pathlib import Path
+
 if str(Path.cwd()) not in sys.path:
     sys.path.insert(0, str(Path.cwd()))
 
+from envs.push import AdHocPushAgent, Push
 import argparse
 
 # noinspection PyUnresolvedReferences
@@ -38,7 +40,7 @@ class RandomAgent(object):
 def crop_normalize(img, crop_ratio):
     img = img[crop_ratio[0]:crop_ratio[1]]
     img = Image.fromarray(img).resize((50, 50), Image.ANTIALIAS)
-    return np.transpose(np.array(img), (2, 0, 1)) / 255
+    return np.transpose(np.array(img), (2, 0, 1))
 
 
 if __name__ == '__main__':
@@ -53,6 +55,8 @@ if __name__ == '__main__':
                         help='Run atari mode (stack multiple frames).')
     parser.add_argument('--seed', type=int, default=1,
                         help='Random seed.')
+    parser.add_argument('--ad_hoc_agent', type=str, choices=['True', 'False'])
+    parser.add_argument('--random_action_proba', type=float, default=0.5)
     args = parser.parse_args()
 
     logger.set_level(logger.INFO)
@@ -63,7 +67,11 @@ if __name__ == '__main__':
     env.action_space.seed(args.seed)
     env.seed(args.seed)
 
-    agent = RandomAgent(env.action_space)
+    if args.ad_hoc_agent == 'True':
+        assert isinstance(env.unwrapped, Push)
+        agent = AdHocPushAgent(env)
+    else:
+        agent = RandomAgent(env.action_space)
 
     episode_count = args.num_episodes
     reward = 0
@@ -90,6 +98,7 @@ if __name__ == '__main__':
             'obs': [],
             'action': [],
             'next_obs': [],
+            'pairwise_distances': [],
         })
 
         ob = env.reset()
@@ -109,7 +118,7 @@ if __name__ == '__main__':
                 prev_ob = ob
 
                 action = agent.act(ob, reward, done)
-                ob, reward, done, _ = env.step(action)
+                ob, reward, done, info = env.step(action)
                 ob = crop_normalize(ob, crop)
 
                 replay_buffer[i]['action'].append(action)
@@ -117,6 +126,7 @@ if __name__ == '__main__':
                     np.concatenate((ob, prev_ob), axis=0))
 
                 if done:
+                    lengths.append(len(replay_buffer[i]['action']))
                     break
         else:
 
@@ -124,10 +134,11 @@ if __name__ == '__main__':
                 replay_buffer[i]['obs'].append(ob[1])
 
                 action = agent.act(ob, reward, done)
-                ob, reward, done, _ = env.step(action)
+                ob, reward, done, info = env.step(action)
 
                 replay_buffer[i]['action'].append(action)
                 replay_buffer[i]['next_obs'].append(ob[1])
+                replay_buffer[i]['pairwise_distances'].append(info['pairwise_distances'])
 
                 if done:
                     lengths.append(len(replay_buffer[i]['action']))
@@ -143,4 +154,3 @@ if __name__ == '__main__':
 
     # Save replay buffer to disk.
     utils.save_list_dict_h5py(replay_buffer, args.fname)
-

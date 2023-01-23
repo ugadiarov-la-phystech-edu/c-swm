@@ -1,5 +1,7 @@
 import collections
 
+from torch.nn.functional import binary_cross_entropy_with_logits
+
 import utils
 
 import numpy as np
@@ -20,7 +22,8 @@ class ContrastiveSWM(nn.Module):
     """
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim,
                  num_objects, hinge=1., sigma=0.5, encoder='large',
-                 ignore_action=False, copy_action=False, shuffle_objects=False, interaction_score_threshold=0.5, l1_loss_coef=0.):
+                 ignore_action=False, copy_action=False, shuffle_objects=False, interaction_score_threshold=0.5,
+                 l1_loss_coef=0., distance_score_loss_coef=0.):
         super(ContrastiveSWM, self).__init__()
         self.shuffle_objects = shuffle_objects
 
@@ -37,6 +40,7 @@ class ContrastiveSWM(nn.Module):
         self.pos_loss = 0
         self.neg_loss = 0
         self.l1_loss_coef = l1_loss_coef
+        self.distance_score_loss_coef = distance_score_loss_coef
         self.n_bins = 5
 
         num_channels = input_dims[0]
@@ -88,6 +92,10 @@ class ContrastiveSWM(nn.Module):
 
         self.width = width_height[0]
         self.height = width_height[1]
+        self.pairwise_indices = torch.combinations(torch.arange(start=0, end=self.num_objects)).to('cuda')
+
+    def pairwise(self, state):
+        return state[:, self.pairwise_indices, ...]
 
     def energy(self, state, action, next_state, no_trans=False):
         """Energy function based on normalized squared L2 norm."""
@@ -106,7 +114,7 @@ class ContrastiveSWM(nn.Module):
     def transition_loss(self, state, action, next_state):
         return self.energy(state, action, next_state).mean()
 
-    def contrastive_loss(self, obs, action, next_obs):
+    def contrastive_loss(self, obs, action, next_obs, pairwise_distance_score):
 
         objs = self.obj_extractor(obs)
         next_objs = self.obj_extractor(next_obs)
@@ -126,8 +134,21 @@ class ContrastiveSWM(nn.Module):
         energy, _ = self.energy(state, action, neg_state, no_trans=True)
         self.neg_loss = torch.max(zeros, self.hinge - energy).mean()
 
-        metrics = {}
-        loss = self.pos_loss + self.neg_loss
+        pairwise_state = self.pairwise(state)
+        predicted_pairwise_distance_logit = torch.sum(pairwise_state[:, :, 0, :] * pairwise_state[:, :, 1, :], dim=-1)
+        distance_score_loss = binary_cross_entropy_with_logits(
+            predicted_pairwise_distance_logit, pairwise_distance_score
+        )
+
+        loss = self.pos_loss + self.neg_loss + self.distance_score_loss_coef * distance_score_loss
+        metrics = {
+            'loss': loss.item(),
+            'transition_loss': self.pos_loss.item(),
+            'contrastive_loss': self.neg_loss.item(),
+            'distance_score_loss': distance_score_loss.item(),
+            'distance_score_loss_contrib': self.distance_score_loss_coef * distance_score_loss.item(),
+        }
+
         if interaction_score is not None:
             interaction_score_mean = interaction_score.mean()
             interaction_score_loss = self.l1_loss_coef * interaction_score_mean

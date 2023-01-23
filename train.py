@@ -1,4 +1,6 @@
 import argparse
+import collections
+
 import torch
 import utils
 import datetime
@@ -67,6 +69,7 @@ parser.add_argument('--interaction_score_threshold', type=float, required=True)
 parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
 parser.add_argument('--l1_loss_coef', type=float, required=True)
+parser.add_argument('--distance_score_loss_coef', type=float, required=True)
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -124,6 +127,7 @@ model = modules.ContrastiveSWM(
     encoder=args.encoder, shuffle_objects=args.shuffle_objects,
     interaction_score_threshold=args.interaction_score_threshold,
     l1_loss_coef=args.l1_loss_coef,
+    distance_score_loss_coef=args.distance_score_loss_coef,
 ).to(device)
 
 model.apply(utils.weights_init)
@@ -176,10 +180,11 @@ for epoch in range(1, args.epochs + 1):
     interaction_score_loss = 0
     interaction_score_hist = None
     n_pairs = 0
+    epoch_metrics = collections.Counter()
 
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = [tensor.to(device) for tensor in data_batch]
-        obs, action, next_obs = data_batch
+        obs, action, next_obs, pairwise_distance = data_batch
         obs /= args.pixel_scale
         next_obs /= args.pixel_scale
         optimizer.zero_grad()
@@ -200,13 +205,12 @@ for epoch in range(1, args.epochs + 1):
                 reduction='sum') / obs.size(0)
             loss += next_loss
         else:
-            loss, metrics = model.contrastive_loss(obs, action, next_obs)
+            loss, metrics = model.contrastive_loss(obs, action, next_obs, 1 - pairwise_distance)
+            epoch_metrics += {key: value * obs.size(0) for key, value in metrics.items() if not key.startswith('interaction')}
 
         loss.backward()
-        batch_size = obs.size(0)
-        train_loss += loss.item() * batch_size
         optimizer.step()
-        n += batch_size
+        n += obs.size(0)
 
         if interaction_score_hist is None:
             interaction_score_hist = metrics['interaction_score_hist']
@@ -231,31 +235,32 @@ for epoch in range(1, args.epochs + 1):
 
         step += 1
 
-    avg_loss = train_loss / n
-    record = {
+    epoch_metrics = {key: value / n for key, value in epoch_metrics.items()}
+    epoch_metrics.update({
         'epoch': epoch,
-        'loss': avg_loss,
         'interaction_fraction': model.transition_model.get_interaction_fraction(),
         'interaction_score_mean': interaction_score_mean / n_pairs,
         'interaction_score_loss': interaction_score_loss / n_pairs,
-    }
+    })
     model.transition_model.reset_statistics()
-    log_string = f'====> Epoch: {record["epoch"]} Average loss: {record["loss"]:.8f} Interaction fraction: {record["interaction_fraction"]:.8f}'
-    log_string += f' Interaction score: {record["interaction_score_mean"]:.8f} Interaction loss: {record["interaction_score_loss"]:.8f}'
+    log_string = f'====> Epoch: {epoch_metrics["epoch"]} Average loss: {epoch_metrics["loss"]:.8f} ' \
+                 f'Interaction fraction: {epoch_metrics["interaction_fraction"]:.8f}'
+    log_string += f' Interaction score: {epoch_metrics["interaction_score_mean"]:.8f} ' \
+                  f'Interaction loss: {epoch_metrics["interaction_score_loss"]:.8f}'
 
     interaction_score_hist = interaction_score_hist / interaction_score_hist.sum()
 
     delta = 1 / interaction_score_hist.shape[0]
     for i in range(interaction_score_hist.shape[0]):
-        key = f' interaction_fraction_[{i * delta:.1f};{(i + 1) * delta:.1f}]'
-        record[key] = interaction_score_hist[i]
-        log_string += f'{key}: {interaction_score_hist[i]:.8f}'
+        key = f'interaction_fraction_[{i * delta:.1f};{(i + 1) * delta:.1f}]'
+        epoch_metrics[key] = interaction_score_hist[i]
+        log_string += f' {key}: {interaction_score_hist[i]:.8f}'
 
     print(log_string)
-    wandb.log(record)
+    wandb.log(epoch_metrics)
 
-    if avg_loss < best_loss:
-        best_loss = avg_loss
+    if epoch_metrics['loss'] < best_loss:
+        best_loss = epoch_metrics['loss']
         torch.save(model.state_dict(), model_file)
 
 wandb.finish()
