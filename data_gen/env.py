@@ -56,6 +56,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=1,
                         help='Random seed.')
     parser.add_argument('--ad_hoc_agent', type=str, choices=['True', 'False'])
+    parser.add_argument('--random_action_proba', type=float, default=0.5)
     args = parser.parse_args()
 
     logger.set_level(logger.INFO)

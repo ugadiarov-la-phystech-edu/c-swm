@@ -430,8 +430,9 @@ class Push(gym.Env):
 
 
 class AdHocPushAgent:
-    def __init__(self, env: Push):
+    def __init__(self, env: Push, random_action_proba=0.5):
         self.env = None
+        self.random_action_proba = random_action_proba
         self.set_env(env)
 
     def set_env(self, env: Push):
@@ -442,7 +443,7 @@ class AdHocPushAgent:
         assert len(env.static_box_ids) == 0
 
     def act(self, observation, reward, done):
-        if random.random() > 0.5:
+        if random.random() < self.random_action_proba:
             return self.env.action_space.sample()
 
         box_pos_in_game = [(idx, box_pos) for idx, box_pos in enumerate(self.env.box_pos)
