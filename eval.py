@@ -27,6 +27,7 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
 parser.add_argument('--pixel-scale', type=float, default=1., help='Normalize pixel values in observation.')
 parser.add_argument('--interaction_score_threshold', type=float, required=True)
 parser.add_argument('--l1_loss_coef', type=float, required=True)
+parser.add_argument('--distance_score_loss_coef', type=float, required=True)
 
 args_eval = parser.parse_args()
 
@@ -70,6 +71,7 @@ model = modules.ContrastiveSWM(
     encoder=args.encoder,
     interaction_score_threshold=args.interaction_score_threshold,
     l1_loss_coef=args.l1_loss_coef,
+    distance_score_loss_coef=args.distance_score_loss_coef,
 ).to(device)
 
 model.load_state_dict(torch.load(model_file))
@@ -89,7 +91,7 @@ with torch.no_grad():
     for batch_idx, data_batch in enumerate(eval_loader):
         data_batch = [[t.to(
             device) for t in tensor] for tensor in data_batch]
-        observations, actions = data_batch
+        observations, actions, pairwise_distance = data_batch
 
         if observations[0].size(0) != args.batch_size:
             continue
