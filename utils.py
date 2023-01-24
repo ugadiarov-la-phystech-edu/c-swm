@@ -180,18 +180,15 @@ class PathDataset(data.Dataset):
     def __getitem__(self, idx):
         observations = []
         actions = []
-        rewards = []
         for i in range(self.path_length):
             obs = to_float(self.experience_buffer[idx]['obs'][i])
             action = self.experience_buffer[idx]['action'][i]
-            reward = float(self.experience_buffer[idx]['reward'][i])
             observations.append(obs)
             actions.append(action)
-            rewards.append(reward)
         obs = to_float(
             self.experience_buffer[idx]['next_obs'][self.path_length - 1])
         observations.append(obs)
-        return observations, actions, rewards
+        return observations, actions
 
 
 def observed_colors(num_colors, mode, randomize=True):
