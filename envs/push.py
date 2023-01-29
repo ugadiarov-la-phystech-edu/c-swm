@@ -148,6 +148,7 @@ class Push(gym.Env):
             2: np.asarray((-1, 0)),
             3: np.asarray((0, 1))
         }
+        self.direction2action = {(1, 0): 0, (0, -1): 1, (-1, 0): 2, (0, 1): 3}
 
         self.np_random = None
 
@@ -472,6 +473,18 @@ class AdHocPushAgent:
         return idx * 4 + self.env.direction2action[direction]
 
 
+class RandomPushAgent:
+    def __init__(self, env: Push):
+        self.env = None
+        self.set_env(env)
+
+    def set_env(self, env: Push):
+        self.env = env
+
+    def act(self, observation, reward, done):
+        return env.action_space.sample()
+
+
 if __name__ == "__main__":
     """
     If called directly with argument "random", evaluates the average return of a random policy.
@@ -480,22 +493,37 @@ if __name__ == "__main__":
     env = Push(n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, observation_type='shapes', border_walls=True,
                channels_first=False, width=5, embodied_agent=False, render_scale=10)
 
-    if len(sys.argv) > 1 and sys.argv[1] == "random":
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "random":
+            agent = RandomPushAgent(env)
+        elif sys.argv[1] == "ad_hoc":
+            proba = float(sys.argv[2])
+            agent = AdHocPushAgent(env, random_action_proba=proba)
+        else:
+            raise ValueError(f'Unexpected agent type: {sys.argv[1]}')
+
+        print(f'{sys.argv[1]} agent in action')
+
         all_r = []
+        all_l = []
         n_episodes = 1000
         for i in range(n_episodes):
+            if i % 100 == 0:
+                print(i)
+
             s = env.reset()
-            plt.imshow(s)
-            plt.show()
             done = False
             episode_r = 0
+            l = 0
             while not done:
-                s, r, done, _ = env.step(np.random.randint(env.action_space.n))
+                a = agent.act(None, None, None)
+                s, r, done, _ = env.step(a)
                 episode_r += r
-                plt.imshow(s)
-                plt.show()
+                l += 1
             all_r.append(episode_r)
-        print(np.mean(all_r), np.std(all_r), np.std(all_r) / np.sqrt(n_episodes))
+            all_l.append(l)
+        print(f'Total reward: {np.mean(all_r)} +/- {np.std(all_r)}, std_mean={np.std(all_r) / np.sqrt(n_episodes)}')
+        print(f'Length: {np.mean(all_l)} +/- {np.std(all_l)}, std_mean={np.std(all_l) / np.sqrt(n_episodes)}')
     else:
         s = env.reset()
         plt.imshow(s)
