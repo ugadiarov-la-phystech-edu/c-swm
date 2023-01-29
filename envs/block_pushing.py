@@ -80,12 +80,12 @@ def render_cubes(positions, width):
 class BlockPushing(gym.Env):
     """Gym environment for block pushing task."""
 
-    def __init__(self, width=5, height=5, render_type='shapes', num_objects=5, num_static_objects=0, num_goals=0, hard_walls=True,
+    def __init__(self, width=5, height=5, render_type='shapes', num_objects=5, num_static_objects=0, num_goals=0, border_walls=True,
                  seed=None, random_actions=False):
         self.width = width
         self.height = height
         self.render_type = render_type
-        self.hard_walls = hard_walls
+        self.hard_walls = border_walls
 
         self.num_objects = num_objects
         self.num_static_objects = num_static_objects
