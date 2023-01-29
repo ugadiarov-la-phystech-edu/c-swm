@@ -1,4 +1,6 @@
 import argparse
+import time
+
 import torch
 import utils
 import datetime
@@ -172,6 +174,7 @@ for epoch in range(1, args.epochs + 1):
     model.train()
     train_loss = 0
     n = 0
+    start = time.perf_counter()
 
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = [tensor.to(device) for tensor in data_batch]
@@ -220,7 +223,7 @@ for epoch in range(1, args.epochs + 1):
     print('====> Epoch: {} Average loss: {:.8f}'.format(
         epoch, avg_loss))
 
-    wandb.log({'epoch': epoch, 'loss': avg_loss})
+    wandb.log({'epoch': epoch, 'loss': avg_loss, 'fps': n / (time.perf_counter() - start)})
 
     if avg_loss < best_loss:
         best_loss = avg_loss
