@@ -247,6 +247,7 @@ register(
         'static_goals': True,
         'width': 5,
         'render_scale': 10,
+        'max_episode_steps': 100,
         'channel_wise': True,
     },
 )
@@ -264,6 +265,7 @@ register(
         'static_goals': True,
         'width': 5,
         'render_scale': 10,
+        'max_episode_steps': 100,
         'channel_wise': True,
     },
 )
