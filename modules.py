@@ -96,7 +96,7 @@ class ContrastiveSWM(nn.Module):
             pred_trans = self.transition_model(state, action)
             diff = state + pred_trans - next_state
 
-        return norm * diff.pow(2).sum(2).mean(1)
+        return norm * diff.pow(2).mean(dim=(1, 2))
 
     def transition_loss(self, state, action, next_state):
         return self.energy(state, action, next_state).mean()
