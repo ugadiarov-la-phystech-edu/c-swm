@@ -180,7 +180,7 @@ class PathDataset(data.Dataset):
     """Create dataset of {(o_t, a_t)}_{t=1:N} paths from replay buffer.
     """
 
-    def __init__(self, hdf5_file, path_length=5):
+    def __init__(self, hdf5_file, use_rle, path_length=5):
         """
         Args:
             hdf5_file (string): Path to the hdf5 file that contains experience
@@ -188,20 +188,30 @@ class PathDataset(data.Dataset):
         """
         self.experience_buffer = load_list_dict_h5py(hdf5_file)
         self.path_length = path_length
+        self.use_rle = use_rle
 
     def __len__(self):
         return len(self.experience_buffer)
+
+    def _get_observation(self, ep, step, next_obs=False):
+        obs_key = 'next_obs' if next_obs else 'obs'
+        if not self.use_rle:
+            return to_float(self.experience_buffer[ep][obs_key][step])
+
+        starts = self.experience_buffer[ep][f'{obs_key}_starts'][step]
+        lengths = self.experience_buffer[ep][f'{obs_key}_lengths'][step]
+        values = self.experience_buffer[ep][f'{obs_key}_values'][step]
+        return to_float(rldecode(starts, lengths, values).reshape((-1, 50, 50)))
 
     def __getitem__(self, idx):
         observations = []
         actions = []
         for i in range(self.path_length):
-            obs = to_float(self.experience_buffer[idx]['obs'][i])
+            obs = self._get_observation(idx, i)
             action = self.experience_buffer[idx]['action'][i]
             observations.append(obs)
             actions.append(action)
-        obs = to_float(
-            self.experience_buffer[idx]['next_obs'][self.path_length - 1])
+        obs = self._get_observation(idx, self.path_length - 1)
         observations.append(obs)
         return observations, actions
 

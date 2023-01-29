@@ -26,14 +26,18 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='Disable CUDA training.')
 parser.add_argument('--pixel-scale', type=float, required=True, help='Normalize pixel values in observation.')
 parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
+parser.add_argument('--rle', type=str, choices=['True', 'False'], help='Use run-length encoding for observations')
 
 args_eval = parser.parse_args()
-
 
 meta_file = os.path.join(args_eval.save_folder, 'metadata.pkl')
 model_file = os.path.join(args_eval.save_folder, 'model.pt')
 
 args = pickle.load(open(meta_file, 'rb'))['args']
+
+use_rle = args_eval.rle
+if use_rle is None:
+    use_rle = args.rle if args.rle is not None else False
 
 args.cuda = not args_eval.no_cuda and torch.cuda.is_available()
 args.batch_size = 100
@@ -48,7 +52,7 @@ if args.cuda:
 device = torch.device('cuda' if args.cuda else 'cpu')
 
 dataset = utils.PathDataset(
-    hdf5_file=args.dataset, path_length=args_eval.num_steps)
+    hdf5_file=args.dataset, use_rle=use_rle, path_length=args_eval.num_steps)
 eval_loader = data.DataLoader(
     dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
 
