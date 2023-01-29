@@ -1,5 +1,5 @@
 """Utility functions."""
-
+import collections
 import os
 import h5py
 import numpy as np
@@ -52,8 +52,10 @@ def save_list_dict_h5py(array_dict, fname):
     with h5py.File(fname, 'w') as hf:
         for i in range(len(array_dict)):
             grp = hf.create_group(str(i))
-            for key in array_dict[i].keys():
-                grp.create_dataset(key, data=array_dict[i][key])
+            for step in range(len(array_dict[i]['action'])):
+                step_grp = grp.create_group(str(step))
+                for key in array_dict[i].keys():
+                    step_grp.create_dataset(key, data=array_dict[i][key][step])
 
 
 def load_list_dict_h5py(fname):
@@ -61,9 +63,12 @@ def load_list_dict_h5py(fname):
     array_dict = list()
     with h5py.File(fname, 'r') as hf:
         for i, grp in enumerate(hf.keys()):
-            array_dict.append(dict())
-            for key in hf[grp].keys():
-                array_dict[i][key] = hf[grp][key][:]
+            array_dict.append(collections.defaultdict(list))
+            episode_group = hf[grp]
+            for step in sorted(episode_group.keys(), key=int):
+                step_group = episode_group[step]
+                for key in step_group.keys():
+                    array_dict[i][key].append(np.asarray(step_group[key]))
     return array_dict
 
 

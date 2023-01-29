@@ -115,8 +115,6 @@ if __name__ == '__main__':
 
             while True:
                 add_observation(use_rle, replay_buffer[i], np.concatenate((ob, prev_ob), axis=0))
-                # replay_buffer[i]['obs'].append(
-                #     np.concatenate((ob, prev_ob), axis=0))
                 prev_ob = ob
 
                 action = agent.act(ob, reward, done)
@@ -125,8 +123,6 @@ if __name__ == '__main__':
 
                 replay_buffer[i]['action'].append(action)
                 add_observation(use_rle, replay_buffer[i], np.concatenate((ob, prev_ob), axis=0), next_obs=True)
-                # replay_buffer[i]['next_obs'].append(
-                #     np.concatenate((ob, prev_ob), axis=0))
 
                 if done:
                     break
@@ -134,14 +130,12 @@ if __name__ == '__main__':
 
             while True:
                 add_observation(use_rle, replay_buffer[i], ob[1])
-                # replay_buffer[i]['obs'].append(ob[1])
 
                 action = agent.act(ob, reward, done)
                 ob, reward, done, _ = env.step(action)
 
                 replay_buffer[i]['action'].append(action)
                 add_observation(use_rle, replay_buffer[i], ob[1], next_obs=True)
-                # replay_buffer[i]['next_obs'].append(ob[1])
 
                 if done:
                     lengths.append(len(replay_buffer[i]['action']))
