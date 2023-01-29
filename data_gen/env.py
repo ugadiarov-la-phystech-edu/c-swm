@@ -7,6 +7,9 @@ import collections
 # Get env directory
 import sys
 from pathlib import Path
+
+from envs.push import Push, AdHocPushAgent
+
 if str(Path.cwd()) not in sys.path:
     sys.path.insert(0, str(Path.cwd()))
 
@@ -67,6 +70,8 @@ if __name__ == '__main__':
                         help='Random seed.')
     parser.add_argument('--rle', type=str, choices=['True', 'False'],
                         help='Use run-length encoding for observations')
+    parser.add_argument('--ad_hoc_agent', type=str, choices=['True', 'False'])
+    parser.add_argument('--random_action_proba', type=float, default=0.5)
     args = parser.parse_args()
 
     logger.set_level(logger.INFO)
@@ -78,7 +83,11 @@ if __name__ == '__main__':
     env.action_space.seed(args.seed)
     env.seed(args.seed)
 
-    agent = RandomAgent(env.action_space)
+    if args.ad_hoc_agent == 'True':
+        assert isinstance(env.unwrapped, Push)
+        agent = AdHocPushAgent(env, args.random_action_proba)
+    else:
+        agent = RandomAgent(env.action_space)
 
     episode_count = args.num_episodes
     reward = 0
