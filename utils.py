@@ -128,13 +128,14 @@ def unsorted_segment_sum(tensor, segment_ids, num_segments):
 class StateTransitionsDataset(data.Dataset):
     """Create dataset of (o_t, a_t, o_{t+1}) transitions from replay buffer."""
 
-    def __init__(self, hdf5_file):
+    def __init__(self, hdf5_file, use_rle):
         """
         Args:
             hdf5_file (string): Path to the hdf5 file that contains experience
                 buffer
         """
         self.experience_buffer = load_list_dict_h5py(hdf5_file)
+        self.use_rle = use_rle
 
         # Build table for conversion between linear idx -> episode/step idx
         self.idx2episode = list()
@@ -150,12 +151,22 @@ class StateTransitionsDataset(data.Dataset):
     def __len__(self):
         return self.num_steps
 
+    def _get_observation(self, ep, step, next_obs=False):
+        obs_key = 'next_obs' if next_obs else 'obs'
+        if not self.use_rle:
+            return to_float(self.experience_buffer[ep][obs_key][step])
+
+        starts = self.experience_buffer[ep][f'{obs_key}_starts'][step]
+        lengths = self.experience_buffer[ep][f'{obs_key}_lengths'][step]
+        values = self.experience_buffer[ep][f'{obs_key}_values'][step]
+        return to_float(rldecode(starts, lengths, values).reshape((-1, 50, 50)))
+
     def __getitem__(self, idx):
         ep, step = self.idx2episode[idx]
 
-        obs = to_float(self.experience_buffer[ep]['obs'][step])
+        obs = self._get_observation(ep, step)
         action = self.experience_buffer[ep]['action'][step]
-        next_obs = to_float(self.experience_buffer[ep]['next_obs'][step])
+        next_obs = self._get_observation(ep, step, next_obs=True)
 
         return obs, action, next_obs
 
@@ -276,3 +287,71 @@ def get_colors_and_weights(cmap='Set1', num_colors=9, observed=True,
         colors, weights = unobserved_colors(cmap, num_colors, mode, new_colors)
 
     return colors, weights
+
+
+# https://gist.github.com/nvictus/66627b580c13068589957d6ab0919e66
+def rlencode(x, dropna=False, index_dtype=np.int32):
+    """
+    Run length encoding.
+    Based on http://stackoverflow.com/a/32681075, which is based on the rle
+    function from R.
+
+    Parameters
+    ----------
+    x : 1D array_like
+        Input array to encode
+    dropna: bool, optional
+        Drop all runs of NaNs.
+    index_dtype: np.dtype, optional
+        dtype for 'start positions' and 'run lengths' arrays
+
+    Returns
+    -------
+    start positions, run lengths, run values
+
+    """
+    where = np.flatnonzero
+    x = np.asarray(x)
+    n = len(x)
+    if n == 0:
+        return (np.array([], dtype=index_dtype),
+                np.array([], dtype=index_dtype),
+                np.array([], dtype=x.dtype))
+
+    starts = np.r_[0, where(~np.isclose(x[1:], x[:-1], equal_nan=True)) + 1].astype(index_dtype)
+    lengths = np.diff(np.r_[starts, n]).astype(index_dtype)
+    values = x[starts]
+
+    if dropna:
+        mask = ~np.isnan(values)
+        starts, lengths, values = starts[mask], lengths[mask], values[mask]
+
+    return starts, lengths, values
+
+
+def rldecode(starts, lengths, values, minlength=None):
+    """
+    Decode a run-length encoding of a 1D array.
+
+    Parameters
+    ----------
+    starts, lengths, values : 1D array_like
+        The run-length encoding.
+    minlength : int, optional
+        Minimum length of the output array.
+
+    Returns
+    -------
+    1D array. Missing data will be filled with NaNs.
+
+    """
+    starts, lengths, values = map(np.asarray, (starts, lengths, values))
+    # TODO: check validity of rle
+    ends = starts + lengths
+    n = ends[-1]
+    if minlength is not None:
+        n = max(minlength, n)
+    x = np.full(n, np.nan, dtype=values.dtype)
+    for lo, hi, val in zip(starts, ends, values):
+        x[lo:hi] = val
+    return x

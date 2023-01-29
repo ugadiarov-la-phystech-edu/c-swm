@@ -3,7 +3,7 @@
 Running this script directly executes the random agent in environment and stores
 experience in a replay buffer.
 """
-
+import collections
 # Get env directory
 import sys
 from pathlib import Path
@@ -41,6 +41,18 @@ def crop_normalize(img, crop_ratio):
     return np.transpose(np.array(img), (2, 0, 1))
 
 
+def add_observation(use_run_length_encoding, episode_data_dict, observation, next_obs=False):
+    obs_key = 'next_obs' if next_obs else 'obs'
+    if not use_run_length_encoding:
+        episode_data_dict[obs_key].append(observation)
+        return
+
+    obs_starts, obs_lengths, obs_values = utils.rlencode(observation.reshape(-1))
+    episode_data_dict[f'{obs_key}_starts'].append(obs_starts)
+    episode_data_dict[f'{obs_key}_lengths'].append(obs_lengths)
+    episode_data_dict[f'{obs_key}_values'].append(obs_values)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=None)
     parser.add_argument('--env_id', type=str, default='ShapesTrain-v0',
@@ -53,9 +65,12 @@ if __name__ == '__main__':
                         help='Run atari mode (stack multiple frames).')
     parser.add_argument('--seed', type=int, default=1,
                         help='Random seed.')
+    parser.add_argument('--rle', type=str, choices=['True', 'False'],
+                        help='Use run-length encoding for observations')
     args = parser.parse_args()
 
     logger.set_level(logger.INFO)
+    use_rle = args.rle is not None and args.rle == 'True'
 
     env = gym.make(args.env_id)
 
@@ -85,12 +100,7 @@ if __name__ == '__main__':
     lengths = []
 
     for i in range(episode_count):
-
-        replay_buffer.append({
-            'obs': [],
-            'action': [],
-            'next_obs': [],
-        })
+        replay_buffer.append(collections.defaultdict(list))
 
         ob = env.reset()
 
@@ -104,8 +114,9 @@ if __name__ == '__main__':
             ob = crop_normalize(ob, crop)
 
             while True:
-                replay_buffer[i]['obs'].append(
-                    np.concatenate((ob, prev_ob), axis=0))
+                add_observation(use_rle, replay_buffer[i], np.concatenate((ob, prev_ob), axis=0))
+                # replay_buffer[i]['obs'].append(
+                #     np.concatenate((ob, prev_ob), axis=0))
                 prev_ob = ob
 
                 action = agent.act(ob, reward, done)
@@ -113,21 +124,24 @@ if __name__ == '__main__':
                 ob = crop_normalize(ob, crop)
 
                 replay_buffer[i]['action'].append(action)
-                replay_buffer[i]['next_obs'].append(
-                    np.concatenate((ob, prev_ob), axis=0))
+                add_observation(use_rle, replay_buffer[i], np.concatenate((ob, prev_ob), axis=0), next_obs=True)
+                # replay_buffer[i]['next_obs'].append(
+                #     np.concatenate((ob, prev_ob), axis=0))
 
                 if done:
                     break
         else:
 
             while True:
-                replay_buffer[i]['obs'].append(ob[1])
+                add_observation(use_rle, replay_buffer[i], ob[1])
+                # replay_buffer[i]['obs'].append(ob[1])
 
                 action = agent.act(ob, reward, done)
                 ob, reward, done, _ = env.step(action)
 
                 replay_buffer[i]['action'].append(action)
-                replay_buffer[i]['next_obs'].append(ob[1])
+                add_observation(use_rle, replay_buffer[i], ob[1], next_obs=True)
+                # replay_buffer[i]['next_obs'].append(ob[1])
 
                 if done:
                     lengths.append(len(replay_buffer[i]['action']))

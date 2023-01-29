@@ -66,9 +66,11 @@ parser.add_argument('--shuffle-objects', type=bool, default=False)
 parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
 parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
+parser.add_argument('--rle', type=str, choices=['True', 'False'], help='Use run-length encoding for observations')
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
+use_rle = args.rle is not None and args.rle == 'True'
 
 now = datetime.datetime.now()
 timestamp = now.isoformat()
@@ -102,7 +104,7 @@ pickle.dump({'args': args}, open(meta_file, "wb"))
 device = torch.device('cuda' if args.cuda else 'cpu')
 
 dataset = utils.StateTransitionsDataset(
-    hdf5_file=args.dataset)
+    hdf5_file=args.dataset, use_rle=use_rle)
 train_loader = data.DataLoader(
     dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
