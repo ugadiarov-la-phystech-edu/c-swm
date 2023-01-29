@@ -41,7 +41,7 @@ def load_dict_h5py(fname):
     return array_dict
 
 
-def save_list_dict_h5py(array_dict, fname):
+def save_list_dict_h5py(array_dict, fname, use_rle):
     """Save list of dictionaries containing numpy arrays to h5py file."""
 
     # Ensure directory exists
@@ -50,26 +50,44 @@ def save_list_dict_h5py(array_dict, fname):
         os.makedirs(directory)
 
     with h5py.File(fname, 'w') as hf:
+        hf.create_dataset('use_rle', data=np.array(use_rle))
         for i in range(len(array_dict)):
             grp = hf.create_group(str(i))
-            for step in range(len(array_dict[i]['action'])):
-                step_grp = grp.create_group(str(step))
+            if use_rle:
+                for step in range(len(array_dict[i]['action'])):
+                    step_grp = grp.create_group(str(step))
+                    for key in array_dict[i].keys():
+                        step_grp.create_dataset(key, data=array_dict[i][key][step])
+            else:
                 for key in array_dict[i].keys():
-                    step_grp.create_dataset(key, data=array_dict[i][key][step])
+                    grp.create_dataset(key, data=array_dict[i][key])
 
 
 def load_list_dict_h5py(fname):
     """Restore list of dictionaries containing numpy arrays from h5py file."""
     array_dict = list()
     with h5py.File(fname, 'r') as hf:
-        for i, grp in enumerate(hf.keys()):
-            array_dict.append(collections.defaultdict(list))
-            episode_group = hf[grp]
-            for step in sorted(episode_group.keys(), key=int):
-                step_group = episode_group[step]
-                for key in step_group.keys():
-                    array_dict[i][key].append(np.asarray(step_group[key]))
-    return array_dict
+        use_rle = 'use_rle' in hf and np.asarray(hf['use_rle']).item()
+        i = 0
+        for grp in hf.keys():
+            if grp == 'use_rle':
+                continue
+
+            if use_rle:
+                array_dict.append(collections.defaultdict(list))
+                episode_group = hf[grp]
+                for step in sorted(episode_group.keys(), key=int):
+                    step_group = episode_group[step]
+                    for key in step_group.keys():
+                        array_dict[i][key].append(np.asarray(step_group[key]))
+            else:
+                array_dict.append(dict())
+                for key in hf[grp].keys():
+                    array_dict[i][key] = hf[grp][key][:]
+
+            i += 1
+
+    return array_dict, use_rle
 
 
 def get_colors(cmap='Set1', num_colors=9):
@@ -133,14 +151,13 @@ def unsorted_segment_sum(tensor, segment_ids, num_segments):
 class StateTransitionsDataset(data.Dataset):
     """Create dataset of (o_t, a_t, o_{t+1}) transitions from replay buffer."""
 
-    def __init__(self, hdf5_file, use_rle):
+    def __init__(self, hdf5_file):
         """
         Args:
             hdf5_file (string): Path to the hdf5 file that contains experience
                 buffer
         """
-        self.experience_buffer = load_list_dict_h5py(hdf5_file)
-        self.use_rle = use_rle
+        self.experience_buffer, self.use_rle = load_list_dict_h5py(hdf5_file)
 
         # Build table for conversion between linear idx -> episode/step idx
         self.idx2episode = list()
@@ -180,15 +197,14 @@ class PathDataset(data.Dataset):
     """Create dataset of {(o_t, a_t)}_{t=1:N} paths from replay buffer.
     """
 
-    def __init__(self, hdf5_file, use_rle, path_length=5):
+    def __init__(self, hdf5_file, path_length=5):
         """
         Args:
             hdf5_file (string): Path to the hdf5 file that contains experience
                 buffer
         """
-        self.experience_buffer = load_list_dict_h5py(hdf5_file)
+        self.experience_buffer, self.use_rle = load_list_dict_h5py(hdf5_file)
         self.path_length = path_length
-        self.use_rle = use_rle
 
     def __len__(self):
         return len(self.experience_buffer)

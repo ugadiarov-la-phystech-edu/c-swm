@@ -150,5 +150,5 @@ if __name__ == '__main__':
     env.close()
 
     # Save replay buffer to disk.
-    utils.save_list_dict_h5py(replay_buffer, args.fname)
+    utils.save_list_dict_h5py(replay_buffer, args.fname, use_rle)
 

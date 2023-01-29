@@ -53,4 +53,4 @@ for idx in range(data['train_x'].shape[0]):
 
     replay_buffer.append(sample)
 
-save_list_dict_h5py(replay_buffer, args.fname)
+save_list_dict_h5py(replay_buffer, args.fname, use_rle=False)
