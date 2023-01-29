@@ -65,6 +65,10 @@ class ContrastiveSWM(nn.Module):
                 num_objects=num_objects,
                 shuffle_objects=self.shuffle_objects
             )
+        elif encoder == 'identity':
+            self.obj_extractor = nn.Identity()
+        else:
+            raise ValueError(f'Unexpected encoder type: {encoder}')
 
         self.obj_encoder = EncoderMLP(
             input_dim=np.prod(width_height),

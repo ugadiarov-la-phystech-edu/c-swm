@@ -101,8 +101,8 @@ class Push(gym.Env):
     DESTROY_GOAL_REWARD = -1
 
     def __init__(self, n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, width=5,
-                 embodied_agent=False, return_state=False, observation_type='shapes', max_episode_steps=75,
-                 border_walls=True, channels_first=True, seed=None, render_scale=10):
+                 embodied_agent=False, return_state=True, observation_type='shapes', max_episode_steps=75,
+                 border_walls=True, channels_first=True, channel_wise=False, seed=None, render_scale=10):
         if n_static_boxes > 0:
             assert n_goals == 0 or static_goals, 'Cannot have movable goals with static objects.'
 
@@ -138,6 +138,7 @@ class Push(gym.Env):
         self.observation_type = observation_type
         self.return_state = return_state
         self.channels_first = channels_first
+        self.channel_wise = channel_wise
 
         self.directions = {
             0: np.asarray((1, 0)),
@@ -163,7 +164,7 @@ class Push(gym.Env):
                 (self.w, self.w, self.n_boxes)
             )
         elif self.observation_type in ('squares', 'shapes'):
-            observation_shape = (self.w * self.render_scale, self.w * self.render_scale, 3)
+            observation_shape = (self.w * self.render_scale, self.w * self.render_scale, self._get_image_channels())
             if self.channels_first:
                 observation_shape = (observation_shape[2], *observation_shape[:2])
             self.observation_space = spaces.Box(0, 255, observation_shape, dtype=np.uint8)
@@ -178,6 +179,9 @@ class Push(gym.Env):
 
         self.seed(seed)
         self.reset()
+
+    def _get_image_channels(self):
+        return self.n_boxes if self.channel_wise else 3
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -373,14 +377,17 @@ class Push(gym.Env):
                     self.n_boxes - len(self.static_box_ids) - len(self.goal_ids) * self.static_goals)
 
     def render_squares(self):
-        im = np.zeros((self.w * self.render_scale, self.w * self.render_scale, 3), dtype=np.float32)
+        im = np.zeros((self.w * self.render_scale, self.w * self.render_scale, self._get_image_channels()), dtype=np.float32)
         for idx, pos in enumerate(self.box_pos):
             if pos[0] == -1:
                 assert pos[1] == -1
                 continue
 
             rr, cc = square(pos[0] * self.render_scale, pos[1] * self.render_scale, self.render_scale, im.shape)
-            im[rr, cc, :] = self.colors[idx][:3]
+            if self.channel_wise:
+                im[rr, cc, idx] = 1
+            else:
+                im[rr, cc, :] = self.colors[idx][:3]
 
         if self.channels_first:
             im = im.transpose([2, 0, 1])
@@ -390,7 +397,7 @@ class Push(gym.Env):
         return im.astype(dtype=np.uint8)
 
     def render_shapes(self):
-        im = np.zeros((self.w * self.render_scale, self.w * self.render_scale, 3), dtype=np.float32)
+        im = np.zeros((self.w * self.render_scale, self.w * self.render_scale, self._get_image_channels()), dtype=np.float32)
         for idx, pos in enumerate(self.box_pos):
             if pos[0] == -1:
                 assert pos[1] == -1
@@ -421,7 +428,10 @@ class Push(gym.Env):
                 rr, cc = scalene_triangle(
                     pos[0] * self.render_scale, pos[1] * self.render_scale, self.render_scale, im.shape)
 
-            im[rr, cc, :] = self.colors[idx][:3]
+            if self.channel_wise:
+                im[rr, cc, idx] = 1
+            else:
+                im[rr, cc, :] = self.colors[idx][:3]
 
         if self.channels_first:
             im = im.transpose([2, 0, 1])
