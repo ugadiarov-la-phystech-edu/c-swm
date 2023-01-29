@@ -131,6 +131,7 @@ if __name__ == '__main__':
                 ob = crop_normalize(ob, crop)
 
                 replay_buffer[i]['action'].append(action)
+                replay_buffer[i]['reward'].append(reward)
                 add_observation(use_rle, replay_buffer[i], np.concatenate((ob, prev_ob), axis=0), next_obs=True)
 
                 if done:
@@ -144,6 +145,7 @@ if __name__ == '__main__':
                 ob, reward, done, _ = env.step(action)
 
                 replay_buffer[i]['action'].append(action)
+                replay_buffer[i]['reward'].append(reward)
                 add_observation(use_rle, replay_buffer[i], ob[1], next_obs=True)
 
                 if done:

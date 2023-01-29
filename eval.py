@@ -84,7 +84,7 @@ with torch.no_grad():
     for batch_idx, data_batch in enumerate(eval_loader):
         data_batch = [[t.to(
             device) for t in tensor] for tensor in data_batch]
-        observations, actions = data_batch
+        observations, actions, rewards = data_batch
 
         if observations[0].size(0) != args.batch_size:
             continue

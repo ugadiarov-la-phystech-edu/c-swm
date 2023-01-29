@@ -189,8 +189,9 @@ class StateTransitionsDataset(data.Dataset):
         obs = self._get_observation(ep, step)
         action = self.experience_buffer[ep]['action'][step]
         next_obs = self._get_observation(ep, step, next_obs=True)
+        reward = self.experience_buffer[ep]['reward'][step]
 
-        return obs, action, next_obs
+        return obs, action, next_obs, reward
 
 
 class PathDataset(data.Dataset):
@@ -222,14 +223,17 @@ class PathDataset(data.Dataset):
     def __getitem__(self, idx):
         observations = []
         actions = []
+        rewards = []
         for i in range(self.path_length):
             obs = self._get_observation(idx, i)
             action = self.experience_buffer[idx]['action'][i]
+            reward = self.experience_buffer[idx]['reward'][i]
             observations.append(obs)
             actions.append(action)
+            rewards.append(reward)
         obs = self._get_observation(idx, self.path_length - 1)
         observations.append(obs)
-        return observations, actions
+        return observations, actions, rewards
 
 
 def observed_colors(num_colors, mode, randomize=True):
