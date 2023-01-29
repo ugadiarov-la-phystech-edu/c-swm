@@ -197,7 +197,7 @@ for epoch in range(1, args.epochs + 1):
             loss = model.contrastive_loss(obs, action, next_obs)
 
         loss.backward()
-        train_loss += loss.item()
+        train_loss += loss.item() * obs.size(0)
         optimizer.step()
         n += obs.size(0)
 
