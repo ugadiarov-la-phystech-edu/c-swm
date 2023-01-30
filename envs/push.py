@@ -8,6 +8,8 @@ from gym import spaces
 import sys
 import copy
 
+import matplotlib as mpl
+mpl.use('Agg')
 from matplotlib import pyplot as plt
 
 
