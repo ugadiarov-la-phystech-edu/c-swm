@@ -106,7 +106,9 @@ class Push(gym.Env):
 
     def __init__(self, n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, width=5,
                  embodied_agent=False, return_state=True, observation_type='shapes', max_episode_steps=75,
-                 border_walls=True, channels_first=True, channel_wise=False, seed=None, render_scale=10):
+                 border_walls=True, channels_first=True, channel_wise=False, channels_for_static_objects=True,
+                 seed=None, render_scale=10,
+                 ):
         if n_static_boxes > 0:
             assert n_goals == 0 or static_goals, 'Cannot have movable goals with static objects.'
 
@@ -143,6 +145,7 @@ class Push(gym.Env):
         self.return_state = return_state
         self.channels_first = channels_first
         self.channel_wise = channel_wise
+        self.channels_for_static_objects = channels_for_static_objects
 
         self.directions = {
             0: np.asarray((1, 0)),
@@ -186,7 +189,14 @@ class Push(gym.Env):
         self.reset()
 
     def _get_image_channels(self):
-        return self.n_boxes if self.channel_wise else 3
+        if not self.channel_wise:
+            return 3
+
+        n_channels = self.n_boxes
+        if not self.channels_for_static_objects:
+            n_channels -= len(self.static_box_ids) + len(self.goal_ids) * self.static_goals
+
+        return n_channels
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -390,7 +400,10 @@ class Push(gym.Env):
 
             rr, cc = square(pos[0] * self.render_scale, pos[1] * self.render_scale, self.render_scale, im.shape)
             if self.channel_wise:
-                im[rr, cc, idx] = 1
+                if not self.channels_for_static_objects and (idx in self.goal_ids or idx in self.static_box_ids):
+                    im[rr, cc] = 1
+                else:
+                    im[rr, cc, idx] = 1
             else:
                 im[rr, cc, :] = self.colors[idx][:3]
 
@@ -434,7 +447,10 @@ class Push(gym.Env):
                     pos[0] * self.render_scale, pos[1] * self.render_scale, self.render_scale, im.shape)
 
             if self.channel_wise:
-                im[rr, cc, idx] = 1
+                if not self.channels_for_static_objects and (idx in self.goal_ids or idx in self.static_box_ids):
+                    im[rr, cc] = 1
+                else:
+                    im[rr, cc, idx] = 1
             else:
                 im[rr, cc, :] = self.colors[idx][:3]
 
@@ -493,7 +509,7 @@ if __name__ == "__main__":
     If called without arguments, starts an interactive game played with wasd to move, q to quit.
     """
     env = Push(n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, observation_type='shapes', border_walls=True,
-               channels_first=False, width=5, embodied_agent=False, render_scale=10)
+               channels_first=False, width=5, embodied_agent=False, render_scale=10, return_state=False)
 
     if len(sys.argv) > 1:
         if sys.argv[1] == "random":
