@@ -203,9 +203,9 @@ register(
 )
 
 register(
-    'PushShapesHardWallsTrain-v0',
+    'ShapesOneStaticGoalTrain-v0',
     entry_point='envs.push:Push',
-    max_episode_steps=75,
+    max_episode_steps=100,
     kwargs={
         'observation_type': 'shapes',
         'border_walls': True,
@@ -215,13 +215,15 @@ register(
         'static_goals': True,
         'width': 5,
         'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': False,
     },
 )
 
 register(
-    'PushShapesHardWallsEval-v0',
+    'ShapesOneStaticGoalEval-v0',
     entry_point='envs.push:Push',
-    max_episode_steps=75,
+    max_episode_steps=100,
     kwargs={
         'observation_type': 'shapes',
         'border_walls': True,
@@ -231,6 +233,8 @@ register(
         'static_goals': True,
         'width': 5,
         'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': False,
     },
 )
 
