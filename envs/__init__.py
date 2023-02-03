@@ -2,16 +2,34 @@ from gym.envs.registration import register
 
 register(
     'ShapesTrain-v0',
-    entry_point='envs.block_pushing:BlockPushing',
+    entry_point='envs.push:Push',
     max_episode_steps=100,
-    kwargs={'render_type': 'shapes', 'num_objects': 5, 'num_static_objects': 0, 'num_goals': 0, 'border_walls': True},
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 0,
+        'n_static_boxes': 0,
+        'width': 5,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+    },
 )
 
 register(
     'ShapesEval-v0',
-    entry_point='envs.block_pushing:BlockPushing',
+    entry_point='envs.push:Push',
     max_episode_steps=100,
-    kwargs={'render_type': 'shapes', 'num_objects': 5, 'num_static_objects': 0, 'num_goals': 0, 'border_walls': True}
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 0,
+        'n_static_boxes': 0,
+        'width': 5,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+    },
 )
 
 register(
