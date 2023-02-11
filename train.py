@@ -1,4 +1,5 @@
 import argparse
+import collections
 import time
 
 import torch
@@ -66,6 +67,10 @@ parser.add_argument('--save-folder', type=str,
 parser.add_argument('--pixel-scale', type=float, required=True, help='Normalize pixel values in observation.')
 parser.add_argument('--shuffle-objects', type=bool, default=False)
 parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
+parser.add_argument('--hard_attention', type=str, choices=['True', 'False'], required=True)
+parser.add_argument('--num_layers', type=int, default=3)
+parser.add_argument('--key_query_size', type=int, default=512)
+parser.add_argument('--value_size', type=int, default=512)
 parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
 
@@ -112,19 +117,30 @@ train_loader = data.DataLoader(
 obs = train_loader.__iter__().next()[0]
 input_shape = obs[0].size()
 
-model = modules.ContrastiveSWM(
-    embedding_dim=args.embedding_dim,
-    hidden_dim=args.hidden_dim,
-    action_dim=args.action_dim,
-    input_dims=input_shape,
-    num_objects=args.num_objects,
-    sigma=args.sigma,
-    hinge=args.hinge,
-    ignore_action=args.ignore_action,
-    copy_action=args.copy_action,
-    encoder=args.encoder, shuffle_objects=args.shuffle_objects,
-    use_interactions=args.use_interactions == 'True'
-).to(device)
+model_args = {
+    'embedding_dim': args.embedding_dim,
+    'hidden_dim': args.hidden_dim,
+    'action_dim': args.action_dim,
+    'input_dims': input_shape,
+    'num_objects': args.num_objects,
+    'sigma': args.sigma,
+    'hinge': args.hinge,
+    'ignore_action': args.ignore_action,
+    'copy_action': args.copy_action,
+    'encoder': args.encoder,
+    'shuffle_objects': args.shuffle_objects,
+    'use_interactions': args.use_interactions == 'True',
+    'num_layers': args.num_layers,
+}
+
+if args.hard_attention == 'True':
+    model_args['key_query_size'] = args.key_query_size
+    model_args['value_size'] = args.value_size
+    model = modules.ContrastiveSWMHA(**model_args)
+else:
+    model = modules.ContrastiveSWM(**model_args)
+
+model = model.to(device)
 
 model.apply(utils.weights_init)
 
@@ -171,6 +187,7 @@ wandb.init(
 for epoch in range(1, args.epochs + 1):
     model.train()
     train_loss = 0
+    epoch_metrics = collections.Counter()
     n = 0
     start = time.perf_counter()
 
@@ -197,7 +214,9 @@ for epoch in range(1, args.epochs + 1):
                 reduction='sum') / obs.size(0)
             loss += next_loss
         else:
-            loss = model.contrastive_loss(obs, action, next_obs)
+            loss, metrics = model.contrastive_loss(obs, action, next_obs)
+            for key, value in metrics.items():
+                epoch_metrics[key] += value * obs.size(0)
 
         loss.backward()
         train_loss += loss.item() * obs.size(0)
@@ -218,10 +237,14 @@ for epoch in range(1, args.epochs + 1):
         step += 1
 
     avg_loss = train_loss / n
+    record = {key: value / n for key, value in epoch_metrics.items()}
+    record['loss'] = avg_loss
+    record['epoch'] = epoch
+    record['fps'] = n / (time.perf_counter() - start)
     print('====> Epoch: {} Average loss: {:.8f}'.format(
         epoch, avg_loss))
 
-    wandb.log({'epoch': epoch, 'loss': avg_loss, 'fps': n / (time.perf_counter() - start)})
+    wandb.log(record)
 
     if avg_loss < best_loss:
         best_loss = avg_loss

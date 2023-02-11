@@ -4,6 +4,7 @@ import numpy as np
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 
 class ContrastiveSWM(nn.Module):
@@ -18,7 +19,7 @@ class ContrastiveSWM(nn.Module):
     """
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim,
                  num_objects, hinge=1., sigma=0.5, encoder='large',
-                 ignore_action=False, copy_action=False, shuffle_objects=False, use_interactions=True):
+                 ignore_action=False, copy_action=False, shuffle_objects=False, use_interactions=True, num_layers=3):
         super(ContrastiveSWM, self).__init__()
         self.shuffle_objects = shuffle_objects
 
@@ -31,6 +32,7 @@ class ContrastiveSWM(nn.Module):
         self.ignore_action = ignore_action
         self.copy_action = copy_action
         self.use_interactions = use_interactions
+        self.num_layers = num_layers
         
         self.pos_loss = 0
         self.neg_loss = 0
@@ -83,7 +85,8 @@ class ContrastiveSWM(nn.Module):
             num_objects=num_objects,
             ignore_action=ignore_action,
             copy_action=copy_action,
-            use_interactions=self.use_interactions
+            use_interactions=self.use_interactions,
+            num_layers=self.num_layers,
         )
 
         self.width = width_height[0]
@@ -96,48 +99,60 @@ class ContrastiveSWM(nn.Module):
 
         if no_trans:
             diff = state - next_state
+            return norm * diff.pow(2).mean(2)
         else:
-            pred_trans = self.transition_model(state, action)
-            diff = state + pred_trans - next_state
-
-        return norm * diff.pow(2).mean(dim=(1, 2))
+            pred_state = self.forward_transition(state, action)
+            diff = pred_state - next_state
+            return norm * diff.pow(2).mean(dim=(1, 2))
 
     def transition_loss(self, state, action, next_state):
         return self.energy(state, action, next_state).mean()
 
     def contrastive_loss(self, obs, action, next_obs):
+        state, next_state = self.extract_objects_(obs, next_obs)
 
-        objs = self.obj_extractor(obs)
-        next_objs = self.obj_extractor(next_obs)
-
-        state = self.obj_encoder(objs)
-        next_state = self.obj_encoder(next_objs)
+        self.pos_loss = self.energy(state, action, next_state).mean()
 
         # Sample negative state across episodes at random
-        batch_size = state.size(0)
-        perm = np.random.permutation(batch_size)
-        neg_state = state[perm]
+        neg_obs, neg_state = self.create_negatives_(obs, state)
 
-        self.pos_loss = self.energy(state, action, next_state)
-        zeros = torch.zeros_like(self.pos_loss)
-        
-        self.pos_loss = self.pos_loss.mean()
-        self.neg_loss = torch.max(
-            zeros, self.hinge - self.energy(
-                state, action, neg_state, no_trans=True)).mean()
+        self.neg_loss = self.negative_loss_(state, neg_state)
 
         loss = self.pos_loss + self.neg_loss
 
-        return loss
+        return loss, {'transition_loss': self.pos_loss.item(), 'contrastive_loss': self.neg_loss.item()}
+
+    def extract_objects_(self, obs, next_obs):
+        state = self.forward(obs)
+        next_state = self.forward(next_obs)
+
+        return state, next_state
+
+    def create_negatives_(self, obs, state):
+        batch_size = state.size(0)
+        perm = np.random.permutation(batch_size)
+        neg_obs = obs[perm]
+        neg_state = state[perm]
+
+        return neg_obs, neg_state
+
+    def negative_loss_(self, state, neg_state):
+        energy = self.energy(state, None, neg_state, no_trans=True)
+        zeros = torch.zeros_like(energy)
+        return torch.max(zeros, self.hinge - energy).mean()
 
     def forward(self, obs):
         return self.obj_encoder(self.obj_extractor(obs))
 
+    def forward_transition(self, state, action):
+        pred_trans, _, _ = self.transition_model([state, action, False])
+        return state + pred_trans
+
 
 class TransitionGNN(torch.nn.Module):
     """GNN-based transition function."""
-    def __init__(self, input_dim, hidden_dim, action_dim, num_objects,
-                 ignore_action=False, copy_action=False, act_fn='relu', use_interactions=True, output_dim=None):
+    def __init__(self, input_dim, hidden_dim, action_dim, num_objects, ignore_action=False, copy_action=False,
+                 act_fn='relu', layer_norm=True, num_layers=3, use_interactions=True, output_dim=None):
         super(TransitionGNN, self).__init__()
 
         self.input_dim = input_dim
@@ -150,38 +165,39 @@ class TransitionGNN(torch.nn.Module):
         self.ignore_action = ignore_action
         self.copy_action = copy_action
         self.use_interactions = use_interactions
+        self.num_layers = num_layers
 
         if self.ignore_action:
             self.action_dim = 0
         else:
             self.action_dim = action_dim
 
-        self.edge_mlp = nn.Sequential(
-            nn.Linear(input_dim*2, hidden_dim),
-            utils.get_act_fn(act_fn),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            utils.get_act_fn(act_fn),
-            nn.Linear(hidden_dim, hidden_dim))
+        tmp_action_dim = self.action_dim
+        edge_mlp_input_size = self.input_dim * 2
 
-        node_input_dim = input_dim + self.action_dim
-        if self.use_interactions:
-            node_input_dim += hidden_dim
+        self.edge_mlp = nn.Sequential(*self.make_node_mlp_layers_(
+            edge_mlp_input_size, self.hidden_dim, act_fn, layer_norm
+        ))
 
-        self.node_mlp = nn.Sequential(
-            nn.Linear(node_input_dim, hidden_dim),
-            utils.get_act_fn(act_fn),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            utils.get_act_fn(act_fn),
-            nn.Linear(hidden_dim, self.output_dim))
+        if self.num_objects == 1 or not self.use_interactions:
+            node_input_dim = self.input_dim + tmp_action_dim
+        else:
+            node_input_dim = hidden_dim + self.input_dim + tmp_action_dim
+
+        self.node_mlp = nn.Sequential(*self.make_node_mlp_layers_(
+            node_input_dim, self.output_dim, act_fn, layer_norm
+        ))
 
         self.edge_list = None
         self.batch_size = 0
 
-    def _edge_model(self, source, target, edge_attr):
-        del edge_attr  # Unused.
-        out = torch.cat([source, target], dim=1)
+    def _edge_model(self, source, target, action=None):
+        if action is None:
+            x = [source, target]
+        else:
+            x = [source, target, action]
+
+        out = torch.cat(x, dim=1)
         return self.edge_mlp(out)
 
     def _node_model(self, node_attr, edge_index, edge_attr):
@@ -194,7 +210,7 @@ class TransitionGNN(torch.nn.Module):
             out = node_attr
         return self.node_mlp(out)
 
-    def _get_edge_list_fully_connected(self, batch_size, num_objects, cuda):
+    def _get_edge_list_fully_connected(self, batch_size, num_objects, device):
         # Only re-evaluate if necessary (e.g. if batch size changed).
         if self.edge_list is None or self.batch_size != batch_size:
             self.batch_size = batch_size
@@ -216,56 +232,96 @@ class TransitionGNN(torch.nn.Module):
 
             # Transpose to COO format -> Shape: [2, num_edges].
             self.edge_list = self.edge_list.transpose(0, 1)
-
-            if cuda:
-                self.edge_list = self.edge_list.cuda()
+            self.edge_list = self.edge_list.to(device)
 
         return self.edge_list
 
-    def forward(self, states, action):
+    def process_action_(self, action, viz=False):
+        if self.copy_action:
+            if len(action.shape) == 1:
+                # action is an integer
+                action_vec = utils.to_one_hot(action, self.action_dim).repeat(1, self.num_objects)
+            else:
+                # action is a vector
+                action_vec = action.repeat(1, self.num_objects)
 
-        cuda = states.is_cuda
+            # mix node and batch dimension
+            action_vec = action_vec.reshape(-1, self.action_dim).float()
+        else:
+            # we have a separate action for each node
+            if len(action.shape) == 1:
+                # index for both object and action
+                action_vec = utils.to_one_hot(action, self.action_dim * self.num_objects)
+                action_vec = action_vec.reshape(-1, self.action_dim)
+            else:
+                action_vec = action.reshape(action.size(0), self.action_dim * self.num_objects)
+                action_vec = action_vec.reshape(-1, self.action_dim)
+
+        return action_vec
+
+    def forward(self, x):
+        states, action, viz = x
+
+        device = states.device
         batch_size = states.size(0)
         num_nodes = states.size(1)
 
         # states: [batch_size (B), num_objects, embedding_dim]
         # node_attr: Flatten states tensor to [B * num_objects, embedding_dim]
-        node_attr = states.view(-1, self.input_dim)
+        node_attr = states.reshape(-1, self.input_dim)
+
+        if not self.ignore_action:
+            action_vec = self.process_action_(action, viz=viz)
 
         edge_attr = None
         edge_index = None
 
-        if num_nodes > 1:
+        if num_nodes > 1 and self.use_interactions:
             # edge_index: [B * (num_objects*[num_objects-1]), 2] edge list
             edge_index = self._get_edge_list_fully_connected(
-                batch_size, num_nodes, cuda)
+                batch_size, num_nodes, device)
 
             row, col = edge_index
-            edge_attr = self._edge_model(
-                node_attr[row], node_attr[col], edge_attr)
+            edge_attr = self._edge_model(node_attr[row], node_attr[col])
 
         if not self.ignore_action:
-
-            if self.copy_action:
-                action_vec = utils.to_one_hot(
-                    action, self.action_dim).repeat(1, self.num_objects)
-                action_vec = action_vec.view(-1, self.action_dim)
-            else:
-                action_vec = utils.to_one_hot(
-                    action, self.action_dim * num_nodes)
-                action_vec = action_vec.view(-1, self.action_dim)
-
             # Attach action to each state
             node_attr = torch.cat([node_attr, action_vec], dim=-1)
-
-        if not self.use_interactions:
-            edge_attr = None
 
         node_attr = self._node_model(
             node_attr, edge_index, edge_attr)
 
         # [batch_size, num_nodes, hidden_dim]
-        return node_attr.view(batch_size, num_nodes, -1)
+        node_attr = node_attr.view(batch_size, num_nodes, -1)
+
+        # we return the same thing as input but with a changed state
+        # this allows us to stack GNNs
+        return node_attr, action, viz
+
+    def make_node_mlp_layers_(self, input_dim, output_dim, act_fn, layer_norm):
+        layers = []
+
+        for idx in range(self.num_layers):
+
+            if idx == 0:
+                # first layer, input_dim => hidden_dim
+                layers.append(nn.Linear(input_dim, self.hidden_dim))
+                layers.append(utils.get_act_fn(act_fn))
+            elif idx == self.num_layers - 2:
+                # layer before the last, add layer norm
+                layers.append(nn.Linear(self.hidden_dim, self.hidden_dim))
+                if layer_norm:
+                    layers.append(nn.LayerNorm(self.hidden_dim))
+                layers.append(utils.get_act_fn(act_fn))
+            elif idx == self.num_layers - 1:
+                # last layer, hidden_dim => output_dim and no activation
+                layers.append(nn.Linear(self.hidden_dim, output_dim))
+            else:
+                # all other layers, hidden_dim => hidden_dim
+                layers.append(nn.Linear(self.hidden_dim, self.hidden_dim))
+                layers.append(utils.get_act_fn(act_fn))
+
+        return layers
 
 
 class EncoderCNNSmall(nn.Module):
@@ -543,3 +599,176 @@ class DecoderCNNLarge(nn.Module):
         h = self.act4(self.ln1(self.deconv2(h)))
         h = self.act5(self.ln1(self.deconv3(h)))
         return self.deconv4(h)
+
+
+class AttentionV1(nn.Module):
+    HIDDEN_SIZE = 512
+
+    def __init__(self, state_size, action_size, key_query_size, value_size, sqrt_scale,
+                 ablate_weights=False, use_sigmoid=False):
+        super().__init__()
+
+        self.state_size = state_size
+        self.action_size = action_size
+        self.key_query_size = key_query_size
+        self.value_size = value_size
+        self.sqrt_scale = sqrt_scale
+        self.ablate_weights = ablate_weights
+        self.use_sigmoid = use_sigmoid
+
+        if self.use_sigmoid:
+            self.normalizer = lambda x, dim: F.sigmoid(x)
+        else:
+            self.normalizer = F.softmax
+
+        self.fc_key = MLP(self.state_size, self.key_query_size, self.HIDDEN_SIZE)
+        self.fc_query = MLP(self.action_size, self.key_query_size, self.HIDDEN_SIZE)
+        self.fc_value = MLP(self.action_size, self.value_size, self.HIDDEN_SIZE)
+
+    def forward(self, x):
+        state, action = x
+
+        # flatten state
+        batch_size = state.size(0)
+        obj_size = state.size(1)
+        state_r = state.reshape(batch_size * obj_size, state.size(2))
+
+        # create keys and queries
+        key_r = self.fc_key(state_r)
+        query = self.fc_query(action)
+        value = self.fc_value(action)
+
+        key = key_r.reshape(batch_size, obj_size, self.key_query_size)
+
+        # compute a vector of attention weights, one for each object slot
+        if self.sqrt_scale:
+            weights = self.normalizer((key * query[:, None]).sum(dim=2) * (1 / np.sqrt(self.key_query_size)), dim=-1)
+        else:
+            weights = self.normalizer((key * query[:, None]).sum(dim=2), dim=-1)
+
+        if self.ablate_weights:
+            # set uniform weights to check if they provide any benefit
+            weights = torch.ones_like(weights) / weights.shape[1]
+
+        # create a separate action for each object slot
+        # weights: [|B|, |O|], value: [|B|, value_size]
+        # => [|B|, |O|, value_size]
+        return weights[:, :, None] * value[:, None, :]
+
+    def forward_weights(self, x):
+        state, action = x
+
+        # flatten state
+        batch_size = state.size(0)
+        obj_size = state.size(1)
+        state_r = state.reshape(batch_size * obj_size, state.size(2)) # 5000 x 2
+
+        # create keys and queries
+        key_r = self.fc_key(state_r) # 5000 x 512
+        query = self.fc_query(action) # 1000 x 512
+
+        key = key_r.reshape(batch_size, obj_size, self.key_query_size) # 1000 x 5 x 512
+
+        # compute a vector of attention weights, one for each object slot
+        if self.sqrt_scale:
+            weights = self.normalizer((key * query[:, None]).sum(dim=2) * (1 / np.sqrt(self.key_query_size)), dim=-1) # 1000 x 5
+        else:
+            weights = self.normalizer((key * query[:, None]).sum(dim=2), dim=-1)
+
+        if self.ablate_weights:
+            # set uniform weights to check if they provide any benefit
+            weights = torch.ones_like(weights) / weights.shape[1]
+
+        return weights
+
+
+class MLP(nn.Module):
+    """MLP encoder, maps observation to latent state."""
+
+    def __init__(self, input_dim, output_dim, hidden_dim, act_fn='relu'):
+        super(MLP, self).__init__()
+
+        self.input_dim = input_dim
+
+        self.fc1 = nn.Linear(self.input_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc3 = nn.Linear(hidden_dim, output_dim)
+
+        self.ln = nn.LayerNorm(hidden_dim)
+
+        self.act1 = utils.get_act_fn(act_fn)
+        self.act2 = utils.get_act_fn(act_fn)
+
+    def forward(self, x):
+        h = self.act1(self.fc1(x))
+        h = self.act2(self.ln(self.fc2(h)))
+        return self.fc3(h)
+
+
+class ContrastiveSWMHA(ContrastiveSWM):
+    def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim, num_objects, hinge=1., sigma=0.5,
+                 encoder='large', ignore_action=False, copy_action=False, shuffle_objects=False, use_interactions=True,
+                 num_layers=3, key_query_size=512, value_size=512):
+        super().__init__(embedding_dim, input_dims, hidden_dim, action_dim, num_objects, hinge, sigma, encoder,
+                         ignore_action, copy_action, shuffle_objects, use_interactions, num_layers)
+
+        self.attention = AttentionV1(
+            state_size=self.embedding_dim,
+            action_size=self.action_dim,
+            key_query_size=key_query_size,
+            value_size=value_size,
+            sqrt_scale=True,
+            use_sigmoid=False
+        )
+
+    def energy(self, state, action, next_state, no_trans=False):
+        """Energy function based on normalized squared L2 norm."""
+
+        norm = 0.5 / (self.sigma**2)
+
+        if no_trans:
+            diff = state - next_state
+            return norm * diff.pow(2).mean(2)
+        else:
+            pred_state, weights = self.forward_transition(state, action, all=True)
+            diff = pred_state - next_state[:, None]
+            diff = diff.pow(2).mean(dim=(2, 3))
+            diff = (diff * weights).sum(1)
+            return norm * diff
+
+    def forward_transition(self, state, action, all=False):
+        if len(action.shape) == 1:
+            action = utils.to_one_hot(action, self.action_dim)
+        else:
+            assert len(action.shape) == 2
+        weights = self.attention.forward_weights([state, action])
+
+        if all:
+            pred_state = []
+            for obj_idx in range(self.num_objects):
+                node_idx = torch.zeros(action.size(0), dtype=torch.long, device=action.device) + obj_idx
+                tmp_action = self.action_to_target_node(action, node_idx)
+                pred_trans, _, _ = self.transition_model([state, tmp_action, False])
+                pred_state.append(state + pred_trans)
+            return torch.stack(pred_state, dim=1), weights
+        else:
+            node_idx = torch.argmax(weights, dim=1)
+            action = self.action_to_target_node(action, node_idx)
+            pred_trans, _, _ = self.transition_model([state, action, False])
+            return state + pred_trans
+
+    def forward_weights(self, state, action):
+        if len(action.shape) == 1:
+            action = utils.to_one_hot(action, self.action_dim)
+        else:
+            assert len(action.shape) == 2
+        return self.attention.forward_weights([state, action])
+
+    def action_to_target_node(self, action, node_idx):
+        new_action = torch.zeros(
+            (action.size(0), self.num_objects, action.size(1)),
+            dtype=torch.float32, device=action.device
+        )
+        indices = list(range(action.size(0)))
+        new_action[indices, node_idx] = action.detach()
+        return new_action
