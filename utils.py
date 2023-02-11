@@ -1,5 +1,4 @@
 """Utility functions."""
-import collections
 import os
 import h5py
 import numpy as np
@@ -51,16 +50,17 @@ def save_list_dict_h5py(array_dict, fname, use_rle):
 
     with h5py.File(fname, 'w') as hf:
         hf.create_dataset('use_rle', data=np.array(use_rle))
-        for i in range(len(array_dict)):
-            grp = hf.create_group(str(i))
-            if use_rle:
-                for step in range(len(array_dict[i]['action'])):
-                    step_grp = grp.create_group(str(step))
-                    for key in array_dict[i].keys():
-                        step_grp.create_dataset(key, data=array_dict[i][key][step])
-            else:
-                for key in array_dict[i].keys():
-                    grp.create_dataset(key, data=array_dict[i][key])
+        for episode in range(len(array_dict)):
+            grp = hf.create_group(str(episode))
+            for array_name, array_value in array_dict[episode].items():
+                if use_rle and isinstance(array_value[0], np.ndarray):
+                    # align sizes of rle arrays
+                    max_len = len(max(array_value, key=len))
+                    for j in range(len(array_value)):
+                        element = array_value[j]
+                        array_value[j] = np.pad(element, pad_width=(max_len - len(element), 0), constant_values=0)
+
+                grp.create_dataset(array_name, data=array_value)
 
 
 def load_list_dict_h5py(fname):
@@ -73,17 +73,9 @@ def load_list_dict_h5py(fname):
             if grp == 'use_rle':
                 continue
 
-            if use_rle:
-                array_dict.append(collections.defaultdict(list))
-                episode_group = hf[grp]
-                for step in sorted(episode_group.keys(), key=int):
-                    step_group = episode_group[step]
-                    for key in step_group.keys():
-                        array_dict[i][key].append(np.asarray(step_group[key]))
-            else:
-                array_dict.append(dict())
-                for key in hf[grp].keys():
-                    array_dict[i][key] = hf[grp][key][:]
+            array_dict.append(dict())
+            for key in hf[grp].keys():
+                array_dict[i][key] = hf[grp][key][:]
 
             i += 1
 
