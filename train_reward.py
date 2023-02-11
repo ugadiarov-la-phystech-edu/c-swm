@@ -13,7 +13,6 @@ import numpy as np
 import logging
 
 from torch.utils import data
-import torch.nn.functional as F
 
 import modules
 import wandb
@@ -65,6 +64,10 @@ parser.add_argument('--save-folder', type=str,
 parser.add_argument('--pixel-scale', type=float, required=True, help='Normalize pixel values in observation.')
 parser.add_argument('--shuffle-objects', type=bool, default=False)
 parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
+parser.add_argument('--hard_attention', type=str, choices=['True', 'False'], required=True)
+parser.add_argument('--num_layers', type=int, default=3)
+parser.add_argument('--key_query_size', type=int, default=512)
+parser.add_argument('--value_size', type=int, default=512)
 parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
 parser.add_argument('--pretrained_cswm_path', type=str, required=True)
@@ -93,6 +96,7 @@ if not os.path.exists(save_folder):
 meta_file = os.path.join(save_folder, 'reward_model_metadata.pkl')
 reward_model_file = os.path.join(save_folder, 'reward_model.pt')
 encoder_file = os.path.join(save_folder, 'encoder.pt')
+attention_file = os.path.join(save_folder, 'attention.pt')
 log_file = os.path.join(save_folder, 'reward_log.txt')
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -125,24 +129,38 @@ reward_model.apply(utils.weights_init)
 obs = train_loader.__iter__().next()[0]
 input_shape = obs[0].size()
 
-cswm = modules.ContrastiveSWM(
-    embedding_dim=args.embedding_dim,
-    hidden_dim=args.hidden_dim,
-    action_dim=args.action_dim,
-    input_dims=input_shape,
-    num_objects=args.num_objects,
-    sigma=args.sigma,
-    hinge=args.hinge,
-    ignore_action=args.ignore_action,
-    copy_action=args.copy_action,
-    encoder=args.encoder, shuffle_objects=args.shuffle_objects,
-    use_interactions=args.use_interactions == 'True'
-).to(device)
+model_args = {
+    'embedding_dim': args.embedding_dim,
+    'hidden_dim': args.hidden_dim,
+    'action_dim': args.action_dim,
+    'input_dims': input_shape,
+    'num_objects': args.num_objects,
+    'sigma': args.sigma,
+    'hinge': args.hinge,
+    'ignore_action': args.ignore_action,
+    'copy_action': args.copy_action,
+    'encoder': args.encoder,
+    'shuffle_objects': args.shuffle_objects,
+    'use_interactions': args.use_interactions == 'True',
+    'num_layers': args.num_layers,
+}
+
+if args.hard_attention == 'True':
+    model_args['key_query_size'] = args.key_query_size
+    model_args['value_size'] = args.value_size
+    cswm = modules.ContrastiveSWMHA(**model_args).to(device)
+    action_converter = modules.ActionConverter(args.action_dim, attention_module=cswm.attention)
+else:
+    cswm = modules.ContrastiveSWM(**model_args).to(device)
+    action_converter = modules.ActionConverter(args.action_dim, attention_module=None)
+
+
 cswm.load_state_dict(torch.load(args.pretrained_cswm_path))
+cswm = cswm.eval()
 for param in cswm.parameters():
     param.requires_grad = False
 
-encoder = nn.Sequential(cswm.obj_extractor, cswm.obj_encoder).eval()
+encoder = nn.Sequential(cswm.obj_extractor, cswm.obj_encoder)
 del cswm
 
 optimizer = torch.optim.Adam(
@@ -172,10 +190,11 @@ for epoch in range(1, args.epochs + 1):
         obs, action, next_obs, rewards = data_batch
         obs /= args.pixel_scale
         embedding = encoder(obs)
-        pred_rewards = reward_model(embedding, action).squeeze().sum(-1)
+        attended_action = action_converter.convert(embedding, action)
+        pred_rewards = reward_model([embedding, attended_action, False])[0].squeeze().sum(-1)
         optimizer.zero_grad()
 
-        loss = nn.functional.mse_loss(pred_rewards, rewards.to(torch.float32))
+        loss = nn.functional.mse_loss(pred_rewards, rewards.to(torch.float32).squeeze())
         loss.backward()
         train_loss += loss.item() * obs.size(0)
         optimizer.step()
@@ -201,3 +220,4 @@ for epoch in range(1, args.epochs + 1):
         best_loss = avg_loss
         torch.save(reward_model.state_dict(), reward_model_file)
         torch.save(encoder.state_dict(), encoder_file)
+        torch.save(action_converter.attention_module.state_dict(), attention_file)

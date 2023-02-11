@@ -772,3 +772,36 @@ class ContrastiveSWMHA(ContrastiveSWM):
         indices = list(range(action.size(0)))
         new_action[indices, node_idx] = action.detach()
         return new_action
+
+
+class ActionConverter:
+    def __init__(self, action_dim: int, attention_module: AttentionV1 = None):
+        super().__init__()
+        self.action_dim = action_dim
+        self.attention_module = attention_module
+
+        assert self.attention_module is None or self.action_dim == self.attention_module.action_size
+
+    def convert(self, state, action):
+        num_objects = state.size()[1]
+        if len(action.shape) == 1:
+            action = utils.to_one_hot(action, self.attention_module.action_size)
+        else:
+            assert len(action.shape) == 2
+
+        if self.attention_module is None:
+            # copy action to all slots if action-attention is not used
+            return action.unsqueeze(1).expand(state.size()[0], num_objects, self.action_dim)
+
+        weights = self.attention_module.forward_weights([state, action])
+        node_idx = torch.argmax(weights, dim=1)
+        return self.action_to_target_node(action, node_idx, num_objects)
+
+    def action_to_target_node(self, action, node_idx, num_objects):
+        new_action = torch.zeros(
+            (action.size(0), num_objects, action.size(1)),
+            dtype=torch.float32, device=action.device
+        )
+        indices = list(range(action.size(0)))
+        new_action[indices, node_idx] = action.detach()
+        return new_action
