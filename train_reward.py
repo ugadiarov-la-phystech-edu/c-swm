@@ -71,6 +71,8 @@ parser.add_argument('--value_size', type=int, default=512)
 parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
 parser.add_argument('--pretrained_cswm_path', type=str, required=True)
+parser.add_argument('--use_next_state', type=str, choices=['True', 'False'], required=True)
+
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -113,8 +115,13 @@ dataset = utils.StateTransitionsDataset(
 train_loader = data.DataLoader(
     dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
+use_next_state = args.use_next_state == 'True'
+reward_model_input_dim = args.embedding_dim
+if use_next_state:
+    reward_model_input_dim = 2 * args.embedding_dim
+
 reward_model = modules.TransitionGNN(
-    input_dim=args.embedding_dim,
+    input_dim=reward_model_input_dim,
     hidden_dim=args.hidden_dim,
     action_dim=args.action_dim,
     num_objects=args.num_objects,
@@ -191,6 +198,11 @@ for epoch in range(1, args.epochs + 1):
         obs /= args.pixel_scale
         embedding = encoder(obs)
         attended_action = action_converter.convert(embedding, action)
+
+        if use_next_state:
+            next_embedding = encoder(next_obs)
+            embedding = torch.cat([embedding, next_embedding], dim=-1)
+
         pred_rewards = reward_model([embedding, attended_action, False])[0].squeeze().sum(-1)
         optimizer.zero_grad()
 
@@ -220,4 +232,5 @@ for epoch in range(1, args.epochs + 1):
         best_loss = avg_loss
         torch.save(reward_model.state_dict(), reward_model_file)
         torch.save(encoder.state_dict(), encoder_file)
-        torch.save(action_converter.attention_module.state_dict(), attention_file)
+        if action_converter.attention_module is not None:
+            torch.save(action_converter.attention_module.state_dict(), attention_file)
