@@ -24,6 +24,7 @@ parser.add_argument('--dataset', type=str,
                     help='Dataset string.')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='Disable CUDA training.')
+parser.add_argument('--hard_attention', type=str, choices=['True', 'False'], required=True)
 
 args_eval = parser.parse_args()
 
@@ -53,20 +54,31 @@ eval_loader = data.DataLoader(
 obs = eval_loader.__iter__().next()[0]
 input_shape = obs[0][0].size()
 
-model = modules.ContrastiveSWM(
-    embedding_dim=args.embedding_dim,
-    hidden_dim=args.hidden_dim,
-    action_dim=args.action_dim,
-    input_dims=input_shape,
-    num_objects=args.num_objects,
-    sigma=args.sigma,
-    hinge=args.hinge,
-    ignore_action=args.ignore_action,
-    copy_action=args.copy_action,
-    encoder=args.encoder,
-    use_interactions=args.use_interactions == 'True'
-).to(device)
 
+model_args = {
+    'embedding_dim': args.embedding_dim,
+    'hidden_dim': args.hidden_dim,
+    'action_dim': args.action_dim,
+    'input_dims': input_shape,
+    'num_objects': args.num_objects,
+    'sigma': args.sigma,
+    'hinge': args.hinge,
+    'ignore_action': args.ignore_action,
+    'copy_action': args.copy_action,
+    'encoder': args.encoder,
+    'shuffle_objects': args.shuffle_objects,
+    'use_interactions': args.use_interactions == 'True',
+    'num_layers': args.num_layers,
+}
+
+if args.hard_attention == 'True':
+    model_args['key_query_size'] = args.key_query_size
+    model_args['value_size'] = args.value_size
+    model = modules.ContrastiveSWMHA(**model_args)
+else:
+    model = modules.ContrastiveSWM(**model_args)
+
+model = model.to(device)
 model.load_state_dict(torch.load(model_file))
 model.eval()
 
@@ -97,8 +109,7 @@ with torch.no_grad():
 
         pred_state = state
         for i in range(args_eval.num_steps):
-            pred_trans = model.transition_model(pred_state, actions[i])
-            pred_state = pred_state + pred_trans
+            pred_trans = model.forward_transition(pred_state, actions[i])
 
         pred_states.append(pred_state.cpu())
         next_states.append(next_state.cpu())
