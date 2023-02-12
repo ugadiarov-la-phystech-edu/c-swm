@@ -96,11 +96,11 @@ save_folder = '{}/{}/'.format(args.save_folder, exp_name)
 
 if not os.path.exists(save_folder):
     os.makedirs(save_folder)
-meta_file = os.path.join(save_folder, f'{args.reward}_model_metadata.pkl')
-reward_model_file = os.path.join(save_folder, f'{args.reward}_model.pt')
+meta_file = os.path.join(save_folder, f'{args.reward_model_name}_model_metadata.pkl')
+reward_model_file = os.path.join(save_folder, f'{args.reward_model_name}_model.pt')
 encoder_file = os.path.join(save_folder, 'encoder.pt')
 attention_file = os.path.join(save_folder, 'attention.pt')
-log_file = os.path.join(save_folder, f'{args.reward}_log.txt')
+log_file = os.path.join(save_folder, f'{args.reward_model_name}_log.txt')
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger()
