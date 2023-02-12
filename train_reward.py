@@ -72,6 +72,7 @@ parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
 parser.add_argument('--pretrained_cswm_path', type=str, required=True)
 parser.add_argument('--use_next_state', type=str, choices=['True', 'False'], required=True)
+parser.add_argument('--reward_model_name', type=str, required=True)
 
 
 args = parser.parse_args()
@@ -95,11 +96,11 @@ save_folder = '{}/{}/'.format(args.save_folder, exp_name)
 
 if not os.path.exists(save_folder):
     os.makedirs(save_folder)
-meta_file = os.path.join(save_folder, 'reward_model_metadata.pkl')
-reward_model_file = os.path.join(save_folder, 'reward_model.pt')
+meta_file = os.path.join(save_folder, f'{args.reward}_model_metadata.pkl')
+reward_model_file = os.path.join(save_folder, f'{args.reward}_model.pt')
 encoder_file = os.path.join(save_folder, 'encoder.pt')
 attention_file = os.path.join(save_folder, 'attention.pt')
-log_file = os.path.join(save_folder, 'reward_log.txt')
+log_file = os.path.join(save_folder, f'{args.reward}_log.txt')
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger()
