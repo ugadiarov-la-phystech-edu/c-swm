@@ -143,7 +143,7 @@ def unsorted_segment_sum(tensor, segment_ids, num_segments):
 class StateTransitionsDataset(data.Dataset):
     """Create dataset of (o_t, a_t, o_{t+1}) transitions from replay buffer."""
 
-    def __init__(self, hdf5_file):
+    def __init__(self, hdf5_file, gamma=1):
         """
         Args:
             hdf5_file (string): Path to the hdf5 file that contains experience
@@ -159,6 +159,12 @@ class StateTransitionsDataset(data.Dataset):
             idx_tuple = [(ep, idx) for idx in range(num_steps)]
             self.idx2episode.extend(idx_tuple)
             step += num_steps
+
+            state_value = [self.experience_buffer[ep]['reward'][-1]]
+            for reward in self.experience_buffer[ep]['reward'][-2::-1]:
+                state_value.append(reward + gamma * state_value[-1])
+
+            self.experience_buffer[ep]['state_value'] = np.asarray(state_value[::-1])
 
         self.num_steps = step
 
@@ -182,8 +188,9 @@ class StateTransitionsDataset(data.Dataset):
         action = self.experience_buffer[ep]['action'][step]
         next_obs = self._get_observation(ep, step, next_obs=True)
         reward = self.experience_buffer[ep]['reward'][step]
+        state_value = self.experience_buffer[ep]['state_value'][step]
 
-        return obs, action, next_obs, reward
+        return obs, action, next_obs, reward, state_value
 
 
 class PathDataset(data.Dataset):
