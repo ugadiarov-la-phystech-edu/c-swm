@@ -193,7 +193,14 @@ for epoch in range(1, args.epochs + 1):
 
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = [tensor.to(device) for tensor in data_batch]
-        obs, action, next_obs, rewards, state_values = data_batch
+        obs, action, next_obs, _, _, is_terminal = data_batch
+        if torch.all(is_terminal).item():
+            continue
+
+        obs = obs[~is_terminal]
+        action = action[~is_terminal]
+        next_obs = next_obs[~is_terminal]
+
         obs /= args.pixel_scale
         next_obs /= args.pixel_scale
         optimizer.zero_grad()

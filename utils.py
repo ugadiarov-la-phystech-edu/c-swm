@@ -155,13 +155,13 @@ class StateTransitionsDataset(data.Dataset):
         self.idx2episode = list()
         step = 0
         for ep in range(len(self.experience_buffer)):
-            num_steps = len(self.experience_buffer[ep]['action'])
+            num_steps = len(self.experience_buffer[ep]['action']) + 1
             idx_tuple = [(ep, idx) for idx in range(num_steps)]
             self.idx2episode.extend(idx_tuple)
             step += num_steps
 
-            state_value = [self.experience_buffer[ep]['reward'][-1]]
-            for reward in self.experience_buffer[ep]['reward'][-2::-1]:
+            state_value = [0]
+            for reward in self.experience_buffer[ep]['reward'][::-1]:
                 state_value.append(reward + gamma * state_value[-1])
 
             self.experience_buffer[ep]['state_value'] = np.asarray(state_value[::-1])
@@ -184,13 +184,23 @@ class StateTransitionsDataset(data.Dataset):
     def __getitem__(self, idx):
         ep, step = self.idx2episode[idx]
 
-        obs = self._get_observation(ep, step)
-        action = self.experience_buffer[ep]['action'][step]
-        next_obs = self._get_observation(ep, step, next_obs=True)
-        reward = self.experience_buffer[ep]['reward'][step]
+        if step == len(self.experience_buffer[ep]['action']):
+            # Get the terminal observation
+            obs = self._get_observation(ep, step - 1, next_obs=True)
+            action = -1
+            next_obs = np.full_like(obs, fill_value=0)
+            reward = np.nan
+            is_terminal = True
+        else:
+            obs = self._get_observation(ep, step)
+            action = self.experience_buffer[ep]['action'][step]
+            next_obs = self._get_observation(ep, step, next_obs=True)
+            reward = self.experience_buffer[ep]['reward'][step]
+            is_terminal = False
+
         state_value = self.experience_buffer[ep]['state_value'][step]
 
-        return obs, action, next_obs, reward, state_value
+        return obs, action, next_obs, reward, state_value, is_terminal
 
 
 class PathDataset(data.Dataset):

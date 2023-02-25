@@ -22,7 +22,8 @@ def emb2str(embedding):
 
 def channel_wise_images(observation):
     img = skimage.transform.rescale(
-        skimage.util.montage(observation, fill=(255,) * 3, grid_shape=(1, observation.shape[0]), padding_width=5, multichannel=True),
+        skimage.util.montage(observation, fill=(255,) * 3, grid_shape=(1, observation.shape[0]), padding_width=5,
+                             multichannel=True),
         order=0,
         scale=2
     )
@@ -84,14 +85,15 @@ if args.ad_hoc_agent == 'True':
 else:
     agent = RandomAgent(env.action_space)
 
-
 observations = [env.reset()[1]]
 actions = []
 rewards = [math.nan]
 reward = None
 done = False
 
+steps = 0
 while not done:
+    steps += 1
     action = agent.act(observations[-1], reward, done)
     actions.append(action)
     ob, reward, done, _ = env.step(action)
@@ -140,7 +142,6 @@ extractor = cswm.obj_extractor
 encoder = nn.Sequential(cswm.obj_extractor, cswm.obj_encoder)
 del cswm
 
-
 reward_use_next_state = reward_args.use_next_state == 'True'
 reward_model_input_dim = cswm_args.embedding_dim
 if reward_use_next_state:
@@ -161,7 +162,6 @@ reward_model.load_state_dict(torch.load(reward_model_file))
 reward_model = reward_model.eval()
 for param in reward_model.parameters():
     param.requires_grad = False
-
 
 state_value_use_next_state = state_value_args.use_next_state == 'True'
 state_value_model_input_dim = cswm_args.embedding_dim
@@ -184,9 +184,9 @@ state_value_model = state_value_model.eval()
 for param in state_value_model.parameters():
     param.requires_grad = False
 
-
 slots = extractor(obs)
-assert obs.size(-1) % slots.size(-1) == 0, f'Expected: size of feature map be a factor of observation size. Actual: feature map size = {slots.size(-1)}, observation size = {obs.size(-1)}'
+assert obs.size(-1) % slots.size(
+    -1) == 0, f'Expected: size of feature map be a factor of observation size. Actual: feature map size = {slots.size(-1)}, observation size = {obs.size(-1)}'
 slots = (slots - slots.min()) / (slots.max() - slots.min())
 slots = slots.unsqueeze(-1).detach().cpu().numpy() * 255
 slots = slots.repeat(repeats=3, axis=-1)
@@ -196,12 +196,14 @@ state_next_state = torch.cat([state[:-1], encoder(next_obs)], dim=-1)
 
 attended_action = action_converter.convert(state[:-1], action)
 
-pred_rewards = reward_model([state_next_state if reward_use_next_state else state[:-1], attended_action, False])[0].squeeze(-1).detach().cpu().numpy()
+pred_rewards = reward_model([state_next_state if reward_use_next_state else state[:-1], attended_action, False])[
+    0].squeeze(-1).detach().cpu().numpy()
 pred_rewards_sum = pred_rewards.sum(-1)
 pred_rewards = [math.nan] + pred_rewards.tolist()
 pred_rewards_sum = [math.nan] + pred_rewards_sum.tolist()
 
-state_values = state_value_model([state_next_state if state_value_use_next_state else state[:-1], attended_action, False])[0].squeeze(-1).detach().cpu().numpy()
+state_values = state_value_model([state_next_state if state_value_use_next_state else state, attended_action, False])[
+    0].squeeze(-1).detach().cpu().numpy()
 state_values_sum = state_values.sum(-1)
 state_values = state_values.tolist()
 state_values_sum = state_values_sum.tolist()
@@ -223,10 +225,17 @@ images = np.concatenate((np.expand_dims(obs, axis=1), slots), axis=1)
 
 columns = ['image', 'action', 'emb', 'emb_delta', 'reward_pred', 'reward_pred_sum', 'reward', 'value', 'value_sum']
 table = wandb.Table(columns=columns)
-for image, action, emb, emb_delta, pred_reward, pred_reward_sum, reward, value, value_sum in zip(images, actions, states, states_delta, pred_rewards, pred_rewards_sum, rewards, state_values, state_values_sum):
+
+for image, action, emb, emb_delta, pred_reward, pred_reward_sum, reward, value, value_sum in zip(images, actions,
+                                                                                                 states, states_delta,
+                                                                                                 pred_rewards,
+                                                                                                 pred_rewards_sum,
+                                                                                                 rewards, state_values,
+                                                                                                 state_values_sum):
     emb_str = emb2str(emb)
     emb_delta_str = emb2str(emb_delta)
-    table.add_data(wandb.Image(channel_wise_images(image)), action, emb_str, emb_delta_str, pred_reward, pred_reward_sum, reward, value, value_sum)
+    table.add_data(wandb.Image(channel_wise_images(image)), action, emb_str, emb_delta_str, pred_reward,
+                   pred_reward_sum, reward, value, value_sum)
 
 wandb.init(
     project=args.project,

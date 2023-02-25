@@ -3,6 +3,7 @@ import time
 
 import torch
 from torch import nn
+from torch.nn import functional
 
 import utils
 import datetime
@@ -16,7 +17,6 @@ from torch.utils import data
 
 import modules
 import wandb
-
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch-size', type=int, default=1024,
@@ -56,7 +56,6 @@ parser.add_argument('--use_next_state', type=str, choices=['True', 'False'], req
 parser.add_argument('--signal', type=str, choices=['reward', 'state_value'], required=True)
 parser.add_argument('--gamma', type=float, default=0.99)
 parser.add_argument('--model_name', type=str, required=True)
-
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -161,7 +160,6 @@ optimizer = torch.optim.Adam(
     model.parameters(),
     lr=args.learning_rate)
 
-
 # Train model.
 print('Starting model training...')
 step = 0
@@ -181,20 +179,47 @@ for epoch in range(1, args.epochs + 1):
 
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = [tensor.to(device) for tensor in data_batch]
-        obs, action, next_obs, rewards, state_values = data_batch
+        obs, action, next_obs, rewards, state_values, is_terminal = data_batch
         obs /= cswm_args.pixel_scale
+        next_obs /= cswm_args.pixel_scale
+        if args.signal == 'reward' or use_next_state:
+            if torch.all(is_terminal).item():
+                continue
+
+            obs = obs[~is_terminal]
+            action = action[~is_terminal]
+            next_obs = next_obs[~is_terminal]
+            rewards = rewards[~is_terminal]
+            state_values = state_values[~is_terminal]
+
+        ground_truth = rewards if args.signal == 'reward' else state_values
+        ground_truth = ground_truth.to(torch.float32).squeeze()
         embedding = encoder(obs)
         attended_action = action_converter.convert(embedding, action)
-        ground_truth = rewards if args.signal == 'reward' else state_values
 
         if use_next_state:
             next_embedding = encoder(next_obs)
             embedding = torch.cat([embedding, next_embedding], dim=-1)
 
-        prediction = model([embedding, attended_action, False])[0].squeeze().sum(-1)
-        optimizer.zero_grad()
+        if args.signal == 'reward' or torch.count_nonzero(is_terminal).item() == 0:
+            prediction = model([embedding, attended_action, False])[0].squeeze().sum(-1)
+            loss = functional.mse_loss(prediction, ground_truth)
+        else:
+            is_not_terminal = ~is_terminal
+            prediction_not_terminal = model([embedding[is_not_terminal], attended_action[is_not_terminal], False])[
+                0].squeeze().sum(-1)
+            loss_not_terminal = functional.mse_loss(prediction_not_terminal, ground_truth[is_not_terminal],
+                                                    reduction='none')
+            prediction_terminal = model([embedding[is_terminal], attended_action[is_terminal], False])[0].squeeze(
+                dim=-1)
+            ground_truth_terminal = ground_truth[is_terminal].unsqueeze(-1).expand_as(prediction_terminal)
 
-        loss = nn.functional.mse_loss(prediction, ground_truth.to(torch.float32).squeeze())
+            loss_terminal = functional.mse_loss(prediction_terminal, ground_truth_terminal, reduction='none').sum(-1)
+
+            loss = (loss_not_terminal.sum() + loss_terminal.sum()) / (
+                        loss_not_terminal.size()[0] + loss_terminal.size()[0])
+
+        optimizer.zero_grad()
         loss.backward()
         train_loss += loss.item() * obs.size(0)
         optimizer.step()
@@ -205,8 +230,8 @@ for epoch in range(1, args.epochs + 1):
                 'Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.8f}'.format(
                     epoch, batch_idx * len(data_batch[0]),
                     len(train_loader.dataset),
-                    100. * batch_idx / len(train_loader),
-                    loss.item() / len(data_batch[0])))
+                           100. * batch_idx / len(train_loader),
+                           loss.item() / len(data_batch[0])))
 
         step += 1
 

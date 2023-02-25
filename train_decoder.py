@@ -157,9 +157,8 @@ for epoch in range(1, args.epochs + 1):
 
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = [tensor.to(device) for tensor in data_batch]
-        obs, action, next_obs, reward, state_value = data_batch
+        obs, _, _, _, _, _ = data_batch
         obs /= args.pixel_scale
-        next_obs /= args.pixel_scale
 
         optimizer_dec.zero_grad()
         objs = model.obj_extractor(obs)
