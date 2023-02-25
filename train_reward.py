@@ -111,7 +111,7 @@ model = modules.TransitionGNN(
     input_dim=reward_model_input_dim,
     hidden_dim=args.hidden_dim,
     action_dim=cswm_args.action_dim,
-    num_objects=cswm_args.num_objects,
+    num_objects=2,
     ignore_action=args.ignore_action,
     copy_action=args.copy_action,
     use_interactions=args.use_interactions == 'True',
@@ -171,6 +171,8 @@ wandb.init(
     name=args.run_id
 )
 
+pairs = torch.combinations(torch.arange(cswm_args.num_objects)).to(device)
+
 for epoch in range(1, args.epochs + 1):
     model.train()
     train_loss = 0
@@ -207,20 +209,37 @@ for epoch in range(1, args.epochs + 1):
             next_embedding = encoder(next_obs)
             embedding = torch.cat([embedding, next_embedding], dim=-1)
 
+        first_objects = embedding[:, pairs[:, 0]]
+        second_objects = embedding[:, pairs[:, 1]]
+
+        pairwise_embedding = torch.stack((first_objects, second_objects), dim=1).permute((0, 2, 1, 3))
+
         if args.signal == 'reward' or torch.count_nonzero(is_terminal).item() == 0:
-            prediction = model([embedding, attended_action, False])[0].squeeze().sum(-1)
+            attended_action = torch.repeat_interleave(attended_action, repeats=pairs.size()[0])
+            pairwise_embedding = pairwise_embedding.reshape(-1, 2, embedding.size()[-1])
+            prediction = model([pairwise_embedding, attended_action, False])[0].squeeze(dim=-1)
+            prediction = prediction.reshape(embedding.size()[0], -1, 2).sum(dim=(1, 2))
             loss = functional.mse_loss(prediction, ground_truth)
         else:
             is_not_terminal = ~is_terminal
-            prediction_not_terminal = model([embedding[is_not_terminal], attended_action[is_not_terminal], False])[
-                0].squeeze().sum(-1)
+            n_is_not_terminal = torch.count_nonzero(is_not_terminal)
+            pairwise_embedding_not_terminal = pairwise_embedding[is_not_terminal].reshape(-1, 2, embedding.size()[-1])
+            attended_action_not_terminal = torch.repeat_interleave(attended_action[is_not_terminal], repeats=pairs.size()[0])
+            prediction_not_terminal = model([pairwise_embedding_not_terminal, attended_action_not_terminal, False])[
+                0].squeeze(dim=-1)
+            prediction_not_terminal = prediction_not_terminal.reshape(n_is_not_terminal, -1, 2).sum(dim=(1, 2))
             loss_not_terminal = functional.mse_loss(prediction_not_terminal, ground_truth[is_not_terminal],
                                                     reduction='none')
-            prediction_terminal = model([embedding[is_terminal], attended_action[is_terminal], False])[0].squeeze(
+
+            n_is_terminal = torch.count_nonzero(is_terminal)
+            pairwise_embedding_terminal = pairwise_embedding[is_terminal].reshape(-1, 2, embedding.size()[-1])
+            attended_action_terminal = torch.repeat_interleave(attended_action[is_terminal], repeats=pairs.size()[0])
+            prediction_terminal = model([pairwise_embedding_terminal, attended_action_terminal, False])[0].squeeze(
                 dim=-1)
+            prediction_terminal = prediction_terminal.reshape(n_is_terminal, -1, 2).sum(dim=2)
             ground_truth_terminal = ground_truth[is_terminal].unsqueeze(-1).expand_as(prediction_terminal)
 
-            loss_terminal = functional.mse_loss(prediction_terminal, ground_truth_terminal, reduction='none').sum(-1)
+            loss_terminal = functional.mse_loss(prediction_terminal, ground_truth_terminal, reduction='none').sum(dim=-1)
 
             loss = (loss_not_terminal.sum() + loss_terminal.sum()) / (
                         loss_not_terminal.size()[0] + loss_terminal.size()[0])
