@@ -192,10 +192,16 @@ for epoch in range(1, args.epochs + 1):
             rewards = rewards[~is_terminal]
             state_values = state_values[~is_terminal]
 
-        ground_truth = rewards if args.signal == 'reward' else state_values
-        ground_truth = ground_truth.to(torch.float32).squeeze()
         embedding = encoder(obs)
-        attended_action = action_converter.convert(embedding, action)
+        if args.signal == 'reward':
+            ground_truth = rewards
+            attended_action = action_converter.convert(embedding, action)
+        else:
+            ground_truth = state_values
+            assert args.ignore_action
+            attended_action = torch.zeros_like(action)
+
+        ground_truth = ground_truth.to(torch.float32).squeeze()
 
         if use_next_state:
             next_embedding = encoder(next_obs)
