@@ -189,7 +189,7 @@ assert obs.size(-1) % slots.size(
     -1) == 0, f'Expected: size of feature map be a factor of observation size. Actual: feature map size = {slots.size(-1)}, observation size = {obs.size(-1)}'
 slots = (slots - slots.min()) / (slots.max() - slots.min())
 slots = slots.unsqueeze(-1).detach().cpu().numpy() * 255
-slots = slots.repeat(repeats=3, axis=-1)
+slots = slots.astype(np.uint8).repeat(repeats=3, axis=-1)
 
 state = encoder(obs)
 state_next_state = torch.cat([state[:-1], encoder(next_obs)], dim=-1)
@@ -214,12 +214,12 @@ states = state.tolist()
 action2symbol = ['🡇', '🡄', '🡅', '🡆']
 actions = [f'obj:{a // len(action2symbol)} {action2symbol[a % len(action2symbol)]}' for a in actions] + ['']
 
-obs = obs.detach().cpu().numpy()
+obs = obs.detach().cpu().numpy() * 255
 
 if env.channel_wise:
     obs = obs.sum(axis=1, keepdims=True).repeat(repeats=3, axis=1)
 
-obs = obs.transpose([0, 2, 3, 1])
+obs = obs.transpose([0, 2, 3, 1]).astype(np.uint8)
 
 images = np.concatenate((np.expand_dims(obs, axis=1), slots), axis=1)
 
