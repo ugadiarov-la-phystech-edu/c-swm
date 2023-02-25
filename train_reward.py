@@ -197,7 +197,7 @@ for epoch in range(1, args.epochs + 1):
         embedding = encoder(obs)
         if args.signal == 'reward':
             ground_truth = rewards
-            attended_action = action_converter.convert(embedding, action)
+            attended_action = action_converter.convert(embedding, action).to(torch.int64)
         else:
             ground_truth = state_values
             assert args.ignore_action

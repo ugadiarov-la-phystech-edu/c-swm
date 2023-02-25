@@ -151,7 +151,7 @@ reward_model = modules.TransitionGNN(
     input_dim=reward_model_input_dim,
     hidden_dim=reward_args.hidden_dim,
     action_dim=cswm_args.action_dim,
-    num_objects=cswm_args.num_objects,
+    num_objects=2,
     ignore_action=reward_args.ignore_action,
     copy_action=reward_args.copy_action,
     use_interactions=reward_args.use_interactions == 'True',
@@ -172,7 +172,7 @@ state_value_model = modules.TransitionGNN(
     input_dim=state_value_model_input_dim,
     hidden_dim=state_value_args.hidden_dim,
     action_dim=cswm_args.action_dim,
-    num_objects=cswm_args.num_objects,
+    num_objects=2,
     ignore_action=state_value_args.ignore_action,
     copy_action=state_value_args.copy_action,
     use_interactions=state_value_args.use_interactions == 'True',
@@ -194,16 +194,27 @@ slots = slots.astype(np.uint8).repeat(repeats=3, axis=-1)
 state = encoder(obs)
 state_next_state = torch.cat([state[:-1], encoder(next_obs)], dim=-1)
 
-attended_action = action_converter.convert(state[:-1], action)
+attended_action = action_converter.convert(state[:-1], action).to(torch.int64)
 
-pred_rewards = reward_model([state_next_state if reward_use_next_state else state[:-1], attended_action, False])[
-    0].squeeze(-1).detach().cpu().numpy()
+pairs = torch.combinations(torch.arange(cswm_args.num_objects)).to(device)
+first_objects = state[:, pairs[:, 0]]
+second_objects = state[:, pairs[:, 1]]
+pairwise_embedding = torch.stack((first_objects, second_objects), dim=1).permute((0, 2, 1, 3))
+
+attended_action_reward = torch.repeat_interleave(attended_action, repeats=pairs.size()[0])
+pairwise_embedding_reward = pairwise_embedding[:-1].reshape(-1, 2, state.size()[-1])
+
+pred_rewards = reward_model([pairwise_embedding_reward, attended_action_reward, False])[0].squeeze(dim=-1)
+pred_rewards = pred_rewards.reshape(state[:-1].size()[0], -1, 2).sum(-1)
 pred_rewards_sum = pred_rewards.sum(-1)
 pred_rewards = [math.nan] + pred_rewards.tolist()
 pred_rewards_sum = [math.nan] + pred_rewards_sum.tolist()
 
-state_values = state_value_model([state_next_state if state_value_use_next_state else state, attended_action, False])[
-    0].squeeze(-1).detach().cpu().numpy()
+
+pairwise_embedding_state_values = pairwise_embedding.reshape(-1, 2, state.size()[-1])
+attended_action_state_values = torch.repeat_interleave(attended_action, repeats=pairs.size()[0])
+state_values = state_value_model([pairwise_embedding_state_values, attended_action_state_values, False])[0].squeeze(dim=-1)
+state_values = state_values.reshape(state.size()[0], -1, 2).sum(-1)
 state_values_sum = state_values.sum(-1)
 state_values = state_values.tolist()
 state_values_sum = state_values_sum.tolist()
