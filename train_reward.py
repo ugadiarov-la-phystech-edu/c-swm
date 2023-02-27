@@ -53,7 +53,7 @@ parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
 parser.add_argument('--pretrained_cswm_path', type=str, required=True)
 parser.add_argument('--use_next_state', type=str, choices=['True', 'False'], required=True)
-parser.add_argument('--signal', type=str, choices=['reward', 'state_value'], required=True)
+parser.add_argument('--signal', type=str, choices=['reward', 'return'], required=True)
 parser.add_argument('--gamma', type=float, default=0.99)
 parser.add_argument('--model_name', type=str, required=True)
 
@@ -179,7 +179,7 @@ for epoch in range(1, args.epochs + 1):
 
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = [tensor.to(device) for tensor in data_batch]
-        obs, action, next_obs, rewards, state_values, is_terminal = data_batch
+        obs, action, next_obs, rewards, returns, is_terminal = data_batch
         obs /= cswm_args.pixel_scale
         next_obs /= cswm_args.pixel_scale
         if args.signal == 'reward' or use_next_state:
@@ -190,14 +190,14 @@ for epoch in range(1, args.epochs + 1):
             action = action[~is_terminal]
             next_obs = next_obs[~is_terminal]
             rewards = rewards[~is_terminal]
-            state_values = state_values[~is_terminal]
+            returns = returns[~is_terminal]
 
         embedding = encoder(obs)
         if args.signal == 'reward':
             ground_truth = rewards
             attended_action = action_converter.convert(embedding, action)
         else:
-            ground_truth = state_values
+            ground_truth = returns
             assert args.ignore_action
             attended_action = torch.zeros_like(action)
 

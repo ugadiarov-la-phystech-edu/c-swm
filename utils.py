@@ -160,11 +160,11 @@ class StateTransitionsDataset(data.Dataset):
             self.idx2episode.extend(idx_tuple)
             step += num_steps
 
-            state_value = [0]
+            returns = [0]
             for reward in self.experience_buffer[ep]['reward'][::-1]:
-                state_value.append(reward + gamma * state_value[-1])
+                returns.append(reward + gamma * returns[-1])
 
-            self.experience_buffer[ep]['state_value'] = np.asarray(state_value[::-1])
+            self.experience_buffer[ep]['return'] = np.asarray(returns[::-1])
 
         self.num_steps = step
 
@@ -198,9 +198,9 @@ class StateTransitionsDataset(data.Dataset):
             reward = self.experience_buffer[ep]['reward'][step]
             is_terminal = False
 
-        state_value = self.experience_buffer[ep]['state_value'][step]
+        returns = self.experience_buffer[ep]['return'][step]
 
-        return obs, action, next_obs, reward, state_value, is_terminal
+        return obs, action, next_obs, reward, returns, is_terminal
 
 
 class PathDataset(data.Dataset):
