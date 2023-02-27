@@ -97,7 +97,7 @@ class Push(gym.Env):
     STATIC_BOX = 'static_box'
     BOX = 'box'
 
-    STEP_REWARD = -0.01
+    STEP_REWARD = -0.00
     OUT_OF_FIELD_REWARD = -0.1
     COLLISION_REWARD = -0.1
     DEATH_REWARD = -1
@@ -296,43 +296,10 @@ class Push(gym.Env):
 
             if box_type == Push.BOX:
                 if another_box_type == Push.BOX:
-                    another_box_new_pos = box_new_pos + vec
-                    if self._is_in_grid(another_box_new_pos):
-                        if self._is_free_cell(another_box_new_pos):
-                            self._move(another_box_id, another_box_new_pos)
-                            self._move(box_id, box_new_pos)
-                        elif self._get_type(self._get_occupied_box_id(another_box_new_pos)) == Push.GOAL:
-                            reward += Push.HIT_GOAL_REWARD
-                            self._destroy_box(another_box_id)
-                            self._move(box_id, box_new_pos)
-                        else:
-                            reward += Push.COLLISION_REWARD
-                    else:
-                        reward += Push.OUT_OF_FIELD_REWARD
-                        if not self.border_walls:
-                            self._destroy_box(another_box_id)
-                            self._move(box_id, box_new_pos)
+                    reward += Push.COLLISION_REWARD
                 elif another_box_type == Push.GOAL:
                     if self.embodied_agent:
-                        another_box_new_pos = box_new_pos + vec
-                        if self._is_in_grid(another_box_new_pos):
-                            if self._is_free_cell(another_box_new_pos):
-                                self._move(another_box_id, another_box_new_pos)
-                                self._move(box_id, box_new_pos)
-                            elif self._get_type(self._get_occupied_box_id(another_box_new_pos)) == Push.GOAL:
-                                reward += Push.COLLISION_REWARD
-                            else:
-                                assert self._get_type(self._get_occupied_box_id(another_box_new_pos)) in (Push.BOX, Push.STATIC_BOX)
-                                reward += Push.HIT_GOAL_REWARD
-                                self._destroy_box(self._get_occupied_box_id(another_box_new_pos))
-                                self._move(another_box_id, another_box_new_pos)
-                                self._move(box_id, box_new_pos)
-                        else:
-                            reward += Push.OUT_OF_FIELD_REWARD
-                            if not self.border_walls:
-                                reward += Push.DESTROY_GOAL_REWARD
-                                self._destroy_box(another_box_id)
-                                self._move(box_id, box_new_pos)
+                        reward += Push.COLLISION_REWARD
                     else:
                         reward += Push.HIT_GOAL_REWARD
                         self._destroy_box(box_id)
