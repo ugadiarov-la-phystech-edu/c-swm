@@ -104,8 +104,6 @@ logger = logging.getLogger()
 logger.addHandler(logging.FileHandler(log_file, 'a'))
 print = logger.info
 
-pickle.dump({'args': args}, open(meta_file, "wb"))
-
 device = torch.device('cuda' if args.cuda else 'cpu')
 
 dataset = utils.StateTransitionsDataset(
@@ -116,6 +114,9 @@ train_loader = data.DataLoader(
 # Get data sample
 obs = train_loader.__iter__().next()[0]
 input_shape = obs[0].size()
+
+args.input_dims = tuple(input_shape)
+pickle.dump({'args': args}, open(meta_file, "wb"))
 
 model_args = {
     'embedding_dim': args.embedding_dim,

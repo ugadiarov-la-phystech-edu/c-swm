@@ -149,6 +149,8 @@ class StateTransitionsDataset(data.Dataset):
             hdf5_file (string): Path to the hdf5 file that contains experience
                 buffer
         """
+        self.gamma = gamma
+        self.has_returns = False
         self.experience_buffer, self.use_rle = load_list_dict_h5py(hdf5_file)
 
         # Build table for conversion between linear idx -> episode/step idx
@@ -160,13 +162,17 @@ class StateTransitionsDataset(data.Dataset):
             self.idx2episode.extend(idx_tuple)
             step += num_steps
 
-            returns = [0]
-            for reward in self.experience_buffer[ep]['reward'][::-1]:
-                returns.append(reward + gamma * returns[-1])
-
-            self.experience_buffer[ep]['return'] = np.asarray(returns[::-1])
-
         self.num_steps = step
+
+    def compute_returns(self):
+        for episode in self.experience_buffer:
+            returns = [np.zeros_like(episode['reward'][0])]
+            for reward in episode['reward'][::-1]:
+                returns.append(reward + self.gamma * returns[-1])
+
+            episode['return'] = np.asarray(returns[::-1])
+
+        self.has_returns = True
 
     def __len__(self):
         return self.num_steps
@@ -189,7 +195,7 @@ class StateTransitionsDataset(data.Dataset):
             obs = self._get_observation(ep, step - 1, next_obs=True)
             action = -1
             next_obs = np.full_like(obs, fill_value=0)
-            reward = np.nan
+            reward = np.full_like(self.experience_buffer[ep]['reward'][0], fill_value=np.nan)
             is_terminal = True
         else:
             obs = self._get_observation(ep, step)
@@ -198,9 +204,9 @@ class StateTransitionsDataset(data.Dataset):
             reward = self.experience_buffer[ep]['reward'][step]
             is_terminal = False
 
-        returns = self.experience_buffer[ep]['return'][step]
+        step_return = self.experience_buffer[ep]['return'][step] if self.has_returns else np.nan
 
-        return obs, action, next_obs, reward, returns, is_terminal
+        return obs, action, next_obs, reward, step_return, is_terminal
 
 
 class PathDataset(data.Dataset):

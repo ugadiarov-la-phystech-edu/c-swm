@@ -119,15 +119,11 @@ model = modules.TransitionGNN(
 ).to(device)
 model.apply(utils.weights_init)
 
-# Get data sample
-obs = train_loader.__iter__().next()[0]
-input_shape = obs[0].size()
-
 cswm_model_args = {
     'embedding_dim': cswm_args.embedding_dim,
     'hidden_dim': cswm_args.hidden_dim,
     'action_dim': cswm_args.action_dim,
-    'input_dims': input_shape,
+    'input_dims': cswm_args.input_dims,
     'num_objects': cswm_args.num_objects,
     'sigma': cswm_args.sigma,
     'hinge': cswm_args.hinge,
