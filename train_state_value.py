@@ -175,7 +175,7 @@ def main():
     compute_returns(dataset, encoder, action_converter, cswm_args, device)
 
     train_loader = data.DataLoader(
-        dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
+        dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
     # Train model.
     print('Starting model training...')
