@@ -203,9 +203,12 @@ for reward, target_object_id in zip(reversed(rewards[1:]), reversed(target_objec
     step_return[target_object_id] += reward
     step_returns.append(step_return)
 
+rewards_object_wise = np.zeros(shape=(len(rewards), cswm_args.num_objects), dtype=np.float32)
+rewards_object_wise[1:][np.arange(len(target_object_ids)), target_object_ids] = rewards[1:]
+rewards_object_wise[0] = np.nan
+
 step_returns = step_returns[::-1]
 step_returns_sum = [step_return.sum() for step_return in step_returns]
-target_object_ids = [f'target:{object_id}' for object_id in target_object_ids] + ['']
 
 state_values = state_value_model([state_next_state if state_value_use_next_state else state, attended_action, False])[
     0].squeeze(-1).detach().cpu().numpy()
@@ -217,7 +220,7 @@ states_delta = [[]] + (state[1:] - state[:-1]).tolist()
 states = state.tolist()
 
 action2symbol = ['🡇', '🡄', '🡅', '🡆']
-actions = [f'obj:{a // len(action2symbol)} {action2symbol[a % len(action2symbol)]}' for a in actions] + ['']
+actions = [f'obj:{a // len(action2symbol)} {action2symbol[a % len(action2symbol)]} | predict:{object_id}' for a, object_id in zip(actions, target_object_ids)] + ['']
 
 obs = obs.detach().cpu().numpy() * 255
 
@@ -228,19 +231,19 @@ obs = obs.transpose([0, 2, 3, 1]).astype(np.uint8)
 
 images = np.concatenate((np.expand_dims(obs, axis=1), slots), axis=1)
 
-columns = ['image', 'action', 'emb', 'emb_delta', 'target', 'return', 'return_sum', 'value', 'value_sum']
+columns = ['image', 'action', 'emb', 'emb_delta', 'reward', 'return', 'return_sum', 'value', 'value_sum']
 table = wandb.Table(columns=columns)
 
-for image, action, emb, emb_delta, target, step_return, step_return_sum, value, value_sum in zip(images, actions,
+for image, action, emb, emb_delta, reward, step_return, step_return_sum, value, value_sum in zip(images, actions,
                                                                                                  states, states_delta,
-                                                                                                 target_object_ids,
+                                                                                                 rewards_object_wise,
                                                                                                  step_returns,
                                                                                                  step_returns_sum,
                                                                                                  state_values,
                                                                                                  state_values_sum):
     emb_str = emb2str(emb)
     emb_delta_str = emb2str(emb_delta)
-    table.add_data(wandb.Image(channel_wise_images(image)), action, emb_str, emb_delta_str, target,
+    table.add_data(wandb.Image(channel_wise_images(image)), action, emb_str, emb_delta_str, reward,
                    step_return, step_return_sum, value, value_sum)
 
 wandb.init(
