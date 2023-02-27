@@ -46,6 +46,7 @@ parser.add_argument('--reward_model_metadata_path', type=str, required=False)
 parser.add_argument('--state_value_model_path', type=str, required=False)
 parser.add_argument('--state_value_model_metadata_path', type=str, required=False)
 parser.add_argument('--seed', type=int, default=0)
+parser.add_argument('--gamma', type=float, default=0.99)
 
 args = parser.parse_args()
 
@@ -195,12 +196,16 @@ state = encoder(obs)
 state_next_state = torch.cat([state[:-1], encoder(next_obs)], dim=-1)
 
 attended_action = action_converter.convert(state[:-1], action)
+target_object_ids = action_converter.target_object_id(state[:-1], action).tolist()
+step_returns = [np.zeros(shape=(cswm_args.num_objects,), dtype=np.float32)]
+for reward, target_object_id in zip(reversed(rewards[1:]), reversed(target_object_ids)):
+    step_return = args.gamma * step_returns[-1]
+    step_return[target_object_id] += reward
+    step_returns.append(step_return)
 
-pred_rewards = reward_model([state_next_state if reward_use_next_state else state[:-1], attended_action, False])[
-    0].squeeze(-1).detach().cpu().numpy()
-pred_rewards_sum = pred_rewards.sum(-1)
-pred_rewards = [math.nan] + pred_rewards.tolist()
-pred_rewards_sum = [math.nan] + pred_rewards_sum.tolist()
+step_returns = step_returns[::-1]
+step_returns_sum = [step_return.sum() for step_return in step_returns]
+target_object_ids = [f'target:{object_id}' for object_id in target_object_ids] + ['']
 
 state_values = state_value_model([state_next_state if state_value_use_next_state else state, attended_action, False])[
     0].squeeze(-1).detach().cpu().numpy()
@@ -223,19 +228,20 @@ obs = obs.transpose([0, 2, 3, 1]).astype(np.uint8)
 
 images = np.concatenate((np.expand_dims(obs, axis=1), slots), axis=1)
 
-columns = ['image', 'action', 'emb', 'emb_delta', 'reward_pred', 'reward_pred_sum', 'reward', 'value', 'value_sum']
+columns = ['image', 'action', 'emb', 'emb_delta', 'target', 'return', 'return_sum', 'value', 'value_sum']
 table = wandb.Table(columns=columns)
 
-for image, action, emb, emb_delta, pred_reward, pred_reward_sum, reward, value, value_sum in zip(images, actions,
+for image, action, emb, emb_delta, target, step_return, step_return_sum, value, value_sum in zip(images, actions,
                                                                                                  states, states_delta,
-                                                                                                 pred_rewards,
-                                                                                                 pred_rewards_sum,
-                                                                                                 rewards, state_values,
+                                                                                                 target_object_ids,
+                                                                                                 step_returns,
+                                                                                                 step_returns_sum,
+                                                                                                 state_values,
                                                                                                  state_values_sum):
     emb_str = emb2str(emb)
     emb_delta_str = emb2str(emb_delta)
-    table.add_data(wandb.Image(channel_wise_images(image)), action, emb_str, emb_delta_str, pred_reward,
-                   pred_reward_sum, reward, value, value_sum)
+    table.add_data(wandb.Image(channel_wise_images(image)), action, emb_str, emb_delta_str, target,
+                   step_return, step_return_sum, value, value_sum)
 
 wandb.init(
     project=args.project,
