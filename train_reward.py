@@ -1,5 +1,6 @@
 import argparse
 import time
+import warnings
 
 import torch
 from torch import nn
@@ -48,6 +49,8 @@ def main():
 
     parser.add_argument('--hidden-dim', type=int, default=512,
                         help='Number of hidden units in transition MLP.')
+    parser.add_argument('--action-dim', type=int, default=4,
+                        help='Dimensionality of action space.')
     parser.add_argument('--ignore-action', action='store_true', default=False,
                         help='Ignore action in GNN transition model.')
     parser.add_argument('--copy-action', action='store_true', default=False,
@@ -117,6 +120,9 @@ def main():
     cswm_model_file = os.path.join(args.pretrained_cswm_path, 'model.pt')
     cswm_args = pickle.load(open(cswm_meta_file, 'rb'))['args']
 
+    if args.action_dim != cswm_args.action_dim:
+        warnings.warn(f'args.action_dim={args.action_dim} cswm_args.action_dim={cswm_args.action_dim}')
+
     use_next_state = args.use_next_state == 'True'
     reward_model_input_dim = cswm_args.embedding_dim
     if use_next_state:
@@ -125,7 +131,7 @@ def main():
     model = modules.TransitionGNN(
         input_dim=reward_model_input_dim,
         hidden_dim=args.hidden_dim,
-        action_dim=cswm_args.action_dim,
+        action_dim=args.action_dim,
         num_objects=cswm_args.num_objects,
         ignore_action=args.ignore_action,
         copy_action=args.copy_action,
@@ -214,7 +220,7 @@ def main():
             embedding = encoder(obs)
             if args.signal == 'reward':
                 ground_truth = rewards
-                attended_action = action_converter.convert(embedding, action)
+                attended_action = action_converter.convert(embedding, action)[:, :, :model.action_dim]
             else:
                 ground_truth = returns
                 assert args.ignore_action
