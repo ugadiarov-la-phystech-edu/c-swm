@@ -257,6 +257,42 @@ register(
 )
 
 register(
+    'ShapesOneGoalTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'static_goals': False,
+        'width': 5,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': False,
+    },
+)
+
+register(
+    'ShapesOneGoalEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'static_goals': False,
+        'width': 5,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': False,
+    },
+)
+
+register(
     'ShapesChannelWiseOneStaticGoalTrain-v0',
     entry_point='envs.push:Push',
     max_episode_steps=100,
