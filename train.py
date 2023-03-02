@@ -73,6 +73,7 @@ parser.add_argument('--hard_attention', type=str, choices=['True', 'False'], req
 parser.add_argument('--num_layers', type=int, default=3)
 parser.add_argument('--key_query_size', type=int, default=512)
 parser.add_argument('--value_size', type=int, default=512)
+parser.add_argument('--pretrained_cswm_path', type=str)
 parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
 
@@ -145,6 +146,44 @@ else:
 model = model.to(device)
 
 model.apply(utils.weights_init)
+
+if args.pretrained_cswm_path is not None:
+    pretrained_cswm_meta_file = os.path.join(args.pretrained_cswm_path, 'metadata.pkl')
+    pretrained_cswm_model_file = os.path.join(args.pretrained_cswm_path, 'model.pt')
+    pretrained_cswm_args = pickle.load(open(pretrained_cswm_meta_file, 'rb'))['args']
+
+    assert args.encoder == pretrained_cswm_args.encoder, f'Pretrained encoder: {pretrained_cswm_args.encoder}. Current encoder: {args.encoder}.'
+
+    cswm_model_args = {
+        'embedding_dim': pretrained_cswm_args.embedding_dim,
+        'hidden_dim': pretrained_cswm_args.hidden_dim,
+        'action_dim': pretrained_cswm_args.action_dim,
+        'input_dims': input_shape,
+        'num_objects': pretrained_cswm_args.num_objects,
+        'sigma': pretrained_cswm_args.sigma,
+        'hinge': pretrained_cswm_args.hinge,
+        'ignore_action': pretrained_cswm_args.ignore_action,
+        'copy_action': pretrained_cswm_args.copy_action,
+        'encoder': pretrained_cswm_args.encoder,
+        'shuffle_objects': pretrained_cswm_args.shuffle_objects,
+        'use_interactions': pretrained_cswm_args.use_interactions == 'True',
+    }
+
+    if pretrained_cswm_args.hard_attention == 'True':
+        cswm_model_args['key_query_size'] = pretrained_cswm_args.key_query_size
+        cswm_model_args['value_size'] = pretrained_cswm_args.value_size
+        cswm_model_args['num_layers'] = pretrained_cswm_args.num_layers
+        cswm = modules.ContrastiveSWMHA(**cswm_model_args).to(device)
+    else:
+        cswm = modules_orig.ContrastiveSWM(**cswm_model_args).to(device)
+
+    cswm.load_state_dict(torch.load(pretrained_cswm_model_file))
+    cswm = cswm.eval()
+    for param in cswm.parameters():
+        param.requires_grad = False
+
+    model.obj_extractor = cswm.obj_extractor
+    del cswm
 
 optimizer = torch.optim.Adam(
     model.parameters(),
