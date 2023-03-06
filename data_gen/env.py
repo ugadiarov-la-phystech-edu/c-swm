@@ -107,6 +107,7 @@ if __name__ == '__main__':
 
     replay_buffer = []
     lengths = []
+    image_shape = None
 
     for i in range(episode_count):
         replay_buffer.append(collections.defaultdict(list))
@@ -115,6 +116,7 @@ if __name__ == '__main__':
 
         if args.atari:
             # Burn-in steps
+            image_shape = ob.shape
             for _ in range(warmstart):
                 action = agent.act(ob, reward, done)
                 ob, _, _, _ = env.step(action)
@@ -137,7 +139,7 @@ if __name__ == '__main__':
                 if done:
                     break
         else:
-
+            image_shape = ob[1].shape
             while True:
                 add_observation(use_rle, replay_buffer[i], ob[1])
 
@@ -161,5 +163,5 @@ if __name__ == '__main__':
     env.close()
 
     # Save replay buffer to disk.
-    utils.save_list_dict_h5py(replay_buffer, args.fname, use_rle)
+    utils.save_list_dict_h5py(replay_buffer, args.fname, use_rle, image_shape)
 

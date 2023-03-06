@@ -40,7 +40,7 @@ def load_dict_h5py(fname):
     return array_dict
 
 
-def save_list_dict_h5py(array_dict, fname, use_rle):
+def save_list_dict_h5py(array_dict, fname, use_rle, image_shape):
     """Save list of dictionaries containing numpy arrays to h5py file."""
 
     # Ensure directory exists
@@ -50,6 +50,7 @@ def save_list_dict_h5py(array_dict, fname, use_rle):
 
     with h5py.File(fname, 'w') as hf:
         hf.create_dataset('use_rle', data=np.array(use_rle))
+        hf.create_dataset('image_shape', data=np.array(image_shape))
         for episode in range(len(array_dict)):
             grp = hf.create_group(str(episode))
             for array_name, array_value in array_dict[episode].items():
@@ -68,9 +69,10 @@ def load_list_dict_h5py(fname):
     array_dict = list()
     with h5py.File(fname, 'r') as hf:
         use_rle = 'use_rle' in hf and np.asarray(hf['use_rle']).item()
+        image_shape = np.asarray(hf['image_shape']) if 'image_shape' in hf else None
         i = 0
         for grp in hf.keys():
-            if grp == 'use_rle':
+            if grp in ('use_rle', 'image_shape'):
                 continue
 
             array_dict.append(dict())
@@ -79,7 +81,7 @@ def load_list_dict_h5py(fname):
 
             i += 1
 
-    return array_dict, use_rle
+    return array_dict, use_rle, image_shape
 
 
 def get_colors(cmap='Set1', num_colors=9):
@@ -149,7 +151,9 @@ class StateTransitionsDataset(data.Dataset):
             hdf5_file (string): Path to the hdf5 file that contains experience
                 buffer
         """
-        self.experience_buffer, self.use_rle = load_list_dict_h5py(hdf5_file)
+        self.gamma = gamma
+        self.has_returns = False
+        self.experience_buffer, self.use_rle, self.image_shape = load_list_dict_h5py(hdf5_file)
 
         # Build table for conversion between linear idx -> episode/step idx
         self.idx2episode = list()
@@ -179,7 +183,7 @@ class StateTransitionsDataset(data.Dataset):
         starts = self.experience_buffer[ep][f'{obs_key}_starts'][step]
         lengths = self.experience_buffer[ep][f'{obs_key}_lengths'][step]
         values = self.experience_buffer[ep][f'{obs_key}_values'][step]
-        return to_float(rldecode(starts, lengths, values).reshape((-1, 50, 50)))
+        return to_float(rldecode(starts, lengths, values).reshape(self.image_shape))
 
     def __getitem__(self, idx):
         ep, step = self.idx2episode[idx]
@@ -213,7 +217,7 @@ class PathDataset(data.Dataset):
             hdf5_file (string): Path to the hdf5 file that contains experience
                 buffer
         """
-        self.experience_buffer, self.use_rle = load_list_dict_h5py(hdf5_file)
+        self.experience_buffer, self.use_rle, self.image_shape = load_list_dict_h5py(hdf5_file)
         self.path_length = path_length
 
     def __len__(self):
@@ -227,7 +231,7 @@ class PathDataset(data.Dataset):
         starts = self.experience_buffer[ep][f'{obs_key}_starts'][step]
         lengths = self.experience_buffer[ep][f'{obs_key}_lengths'][step]
         values = self.experience_buffer[ep][f'{obs_key}_values'][step]
-        return to_float(rldecode(starts, lengths, values).reshape((-1, 50, 50)))
+        return to_float(rldecode(starts, lengths, values).reshape(self.image_shape))
 
     def __getitem__(self, idx):
         observations = []
