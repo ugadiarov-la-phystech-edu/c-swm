@@ -68,12 +68,12 @@ model_args = {
     'encoder': args.encoder,
     'shuffle_objects': args.shuffle_objects,
     'use_interactions': args.use_interactions == 'True',
-    'num_layers': args.num_layers,
 }
 
 if args.hard_attention == 'True':
     model_args['key_query_size'] = args.key_query_size
     model_args['value_size'] = args.value_size
+    model_args['num_layers'] = args.num_layers
     model = modules.ContrastiveSWMHA(**model_args)
 else:
     model = modules.ContrastiveSWM(**model_args)
