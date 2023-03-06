@@ -33,6 +33,134 @@ register(
 )
 
 register(
+    'ShapesBoxes5Width6Train-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 0,
+        'n_static_boxes': 0,
+        'width': 6,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+    },
+)
+
+register(
+    'ShapesBoxes5Width6Eval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 0,
+        'n_static_boxes': 0,
+        'width': 6,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+    },
+)
+
+register(
+    'ShapesBoxes5Width7Train-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 0,
+        'n_static_boxes': 0,
+        'width': 7,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+    },
+)
+
+register(
+    'ShapesBoxes5Width7Eval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 0,
+        'n_static_boxes': 0,
+        'width': 7,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+    },
+)
+
+register(
+    'ShapesBoxes4Width5Train-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 4,
+        'n_goals': 0,
+        'n_static_boxes': 0,
+        'width': 5,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+    },
+)
+
+register(
+    'ShapesBoxes4Width5Eval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 4,
+        'n_goals': 0,
+        'n_static_boxes': 0,
+        'width': 5,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+    },
+)
+
+register(
+    'ShapesBoxes3Width5Train-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 3,
+        'n_goals': 0,
+        'n_static_boxes': 0,
+        'width': 5,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+    },
+)
+
+register(
+    'ShapesBoxes3Width5Eval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 3,
+        'n_goals': 0,
+        'n_static_boxes': 0,
+        'width': 5,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+    },
+)
+
+register(
     'ShapesChannelWiseTrain-v0',
     entry_point='envs.push:Push',
     max_episode_steps=100,
