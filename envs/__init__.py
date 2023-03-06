@@ -161,6 +161,38 @@ register(
 )
 
 register(
+    'ShapesBoxes8Width10Train-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 8,
+        'n_goals': 0,
+        'n_static_boxes': 0,
+        'width': 10,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+    },
+)
+
+register(
+    'ShapesBoxes8Width10Eval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 8,
+        'n_goals': 0,
+        'n_static_boxes': 0,
+        'width': 10,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+    },
+)
+
+register(
     'ShapesChannelWiseTrain-v0',
     entry_point='envs.push:Push',
     max_episode_steps=100,
