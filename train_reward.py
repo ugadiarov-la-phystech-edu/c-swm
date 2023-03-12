@@ -77,6 +77,7 @@ def main():
     parser.add_argument('--signal', type=str, choices=['reward', 'return'], required=True)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--model_name', type=str, required=True)
+    parser.add_argument('--num_workers', type=int, default=4)
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -178,10 +179,8 @@ def main():
     dataset = utils.StateTransitionsDataset(
         hdf5_file=args.dataset, gamma=args.gamma)
 
-    compute_returns(dataset, encoder, action_converter, cswm_args, device)
-
     train_loader = data.DataLoader(
-        dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
+        dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
     # Train model.
     print('Starting model training...')
@@ -217,14 +216,16 @@ def main():
 
             embedding = encoder(obs)
             if args.signal == 'reward':
-                ground_truth = rewards
                 attended_action = action_converter.convert(embedding, action)[:, :, :model.action_dim]
+                target_object_id = action_converter.target_object_id(embedding, action).detach()
+                rewards = rewards.squeeze().to(torch.float32)
+                reward_object_wise = torch.zeros(rewards.size()[0], cswm_args.num_objects, dtype=torch.float32, device=device)
+                reward_object_wise[torch.arange(0, rewards.size()[0], device=device), target_object_id] = rewards
+                ground_truth = reward_object_wise.detach()
             else:
-                ground_truth = returns
+                ground_truth = returns.to(torch.float32).squeeze()
                 assert args.ignore_action
                 attended_action = torch.zeros_like(action)
-
-            ground_truth = ground_truth.to(torch.float32).squeeze()
 
             if use_next_state:
                 next_embedding = encoder(next_obs)
