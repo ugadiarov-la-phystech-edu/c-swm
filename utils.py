@@ -165,6 +165,7 @@ class StateTransitionsDataset(data.Dataset):
             step += num_steps
 
         self.num_steps = step
+        self.compute_returns()
 
     def compute_returns(self):
         for episode in self.experience_buffer:
