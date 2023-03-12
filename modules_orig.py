@@ -293,7 +293,7 @@ class EncoderCNNSmall(nn.Module):
             idx = torch.randperm(h.size(1))
             return h[:, idx]
 
-        return h
+        return -h
 
 
 class EncoderCNNMedium(nn.Module):
