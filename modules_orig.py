@@ -71,6 +71,8 @@ class ContrastiveSWM(nn.Module):
         else:
             raise ValueError(f'Unexpected encoder type: {encoder}')
 
+        self.obj_extractor = nn.Sequential(self.obj_extractor, nn.Sigmoid())
+
         self.obj_encoder = EncoderMLP(
             input_dim=np.prod(width_height),
             hidden_dim=hidden_dim,
