@@ -35,8 +35,6 @@ def compute_returns(dataset, encoder, action_converter, cswm_args, device):
         reward_object_wise[np.arange(0, reward_object_wise.shape[0]), target_object_id] = reward
         dataset.experience_buffer[episode_id]['reward'] = reward_object_wise
 
-    dataset.compute_returns()
-
 
 def main():
     parser = argparse.ArgumentParser()

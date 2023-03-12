@@ -162,10 +162,10 @@ class StateTransitionsDataset(data.Dataset):
             num_steps = len(self.experience_buffer[ep]['action']) + 1
             idx_tuple = [(ep, idx) for idx in range(num_steps)]
             self.idx2episode.extend(idx_tuple)
+            self.experience_buffer[ep]['return'] = np.full(shape=(num_steps,), fill_value=np.nan, dtype=np.float32)
             step += num_steps
 
         self.num_steps = step
-        self.compute_returns()
 
     def compute_returns(self):
         for episode in self.experience_buffer:
