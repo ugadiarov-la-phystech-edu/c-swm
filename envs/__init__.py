@@ -259,6 +259,74 @@ register(
 )
 
 register(
+    'ShapesChannelWiseBoxes5Width7OneStaticGoalTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 7,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseBoxes5Width7OneStaticGoalEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 7,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseBoxes8Width7OneStaticGoalTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 8,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 7,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseBoxes8Width7OneStaticGoalEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 8,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 7,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+    },
+)
+
+register(
     'ShapesChannelWiseTrain-v0',
     entry_point='envs.push:Push',
     max_episode_steps=100,
