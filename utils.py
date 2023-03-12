@@ -164,13 +164,17 @@ class StateTransitionsDataset(data.Dataset):
             self.idx2episode.extend(idx_tuple)
             step += num_steps
 
-            returns = [0]
-            for reward in self.experience_buffer[ep]['reward'][::-1]:
-                returns.append(reward + gamma * returns[-1])
-
-            self.experience_buffer[ep]['return'] = np.asarray(returns[::-1])
-
         self.num_steps = step
+
+    def compute_returns(self):
+        for episode in self.experience_buffer:
+            returns = [np.zeros_like(episode['reward'][0])]
+            for reward in episode['reward'][::-1]:
+                returns.append(reward + self.gamma * returns[-1])
+
+            episode['return'] = np.asarray(returns[::-1])
+
+        self.has_returns = True
 
     def __len__(self):
         return self.num_steps
