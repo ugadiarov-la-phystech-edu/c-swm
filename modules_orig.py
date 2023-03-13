@@ -37,6 +37,8 @@ class ContrastiveSWM(nn.Module):
         self.pos_loss = 0
         self.neg_loss = 0
 
+        self.pairs = torch.combinations(torch.arange(self.num_objects)).to('cuda')
+
         num_channels = input_dims[0]
         width_height = input_dims[1:]
 
@@ -128,10 +130,15 @@ class ContrastiveSWM(nn.Module):
             zeros, self.hinge - self.energy(
                 state, action, neg_state, no_trans=True)).mean()
 
-        reconstruction_loss = 0.0175 * F.binary_cross_entropy_with_logits(objs.sum(dim=1), (obs.mean(dim=1) > 0).to(torch.float32))
-        loss = self.pos_loss + self.neg_loss + reconstruction_loss
+        reconstruction_loss = 0.025 * F.binary_cross_entropy_with_logits(objs.sum(dim=1), (obs.mean(dim=1) > 0).to(torch.float32))
 
-        return loss, {'transition_loss': self.pos_loss.item(), 'contrastive_loss': self.neg_loss.item(), 'reconstruction_loss': reconstruction_loss.item()}
+        first_masks = F.sigmoid(objs[:, self.pairs[:, 0]])
+        second_masks = F.sigmoid(objs[:, self.pairs[:, 1]])
+        background_loss = 0.001 * torch.pow(first_masks * second_masks, exponent=2).mean()
+        loss = self.pos_loss + self.neg_loss + reconstruction_loss + background_loss
+
+        return loss, {'transition_loss': self.pos_loss.item(), 'contrastive_loss': self.neg_loss.item(),
+                      'reconstruction_loss': reconstruction_loss.item(), 'background_loss': background_loss}
 
     def forward(self, obs):
         return self.obj_encoder(self.obj_extractor(obs))
