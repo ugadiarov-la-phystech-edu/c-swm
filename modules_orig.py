@@ -134,7 +134,7 @@ class ContrastiveSWM(nn.Module):
 
         first_masks = F.sigmoid(objs[:, self.pairs[:, 0]])
         second_masks = F.sigmoid(objs[:, self.pairs[:, 1]])
-        background_loss = 1 * torch.minimum(first_masks, second_masks).pow(2).mean()
+        background_loss = 0.1 * torch.minimum(first_masks, second_masks).pow(2).mean()
         loss = self.pos_loss + self.neg_loss + reconstruction_loss + background_loss
 
         return loss, {'transition_loss': self.pos_loss.item(), 'contrastive_loss': self.neg_loss.item(),
