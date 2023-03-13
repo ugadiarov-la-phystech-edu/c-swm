@@ -130,7 +130,7 @@ class ContrastiveSWM(nn.Module):
             zeros, self.hinge - self.energy(
                 state, action, neg_state, no_trans=True)).mean()
 
-        background_diff_loss = 0.01 * torch.mean(F.sigmoid(objs).pow(2) * (1 - F.sigmoid(objs)))
+        background_diff_loss = 0.05 * torch.mean(F.sigmoid(objs).pow(2) * (1 - F.sigmoid(objs)))
         loss = self.pos_loss + self.neg_loss + background_diff_loss
 
         return loss, {'transition_loss': self.pos_loss.item(), 'contrastive_loss': self.neg_loss.item(), 'background_diff_loss': background_diff_loss.item()}
