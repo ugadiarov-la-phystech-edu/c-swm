@@ -4,6 +4,7 @@ import numpy as np
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 
 class ContrastiveSWM(nn.Module):
@@ -127,9 +128,11 @@ class ContrastiveSWM(nn.Module):
             zeros, self.hinge - self.energy(
                 state, action, neg_state, no_trans=True)).mean()
 
-        loss = self.pos_loss + self.neg_loss
+        soft_sign_prod = -F.softsign(objs).mean(dim=(2, 3)).prod(dim=1).mean()
 
-        return loss, {'transition_loss': self.pos_loss.item(), 'contrastive_loss': self.neg_loss.item()}
+        loss = self.pos_loss + self.neg_loss + soft_sign_prod
+
+        return loss, {'transition_loss': self.pos_loss.item(), 'contrastive_loss': self.neg_loss.item(), 'soft_sign_prod': soft_sign_prod}
 
     def forward(self, obs):
         return self.obj_encoder(self.obj_extractor(obs))
