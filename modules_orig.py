@@ -130,7 +130,7 @@ class ContrastiveSWM(nn.Module):
             zeros, self.hinge - self.energy(
                 state, action, neg_state, no_trans=True)).mean()
 
-        reconstruction_loss = 0.025 * F.binary_cross_entropy_with_logits(objs.sum(dim=1), (obs.mean(dim=1) > 0).to(torch.float32))
+        reconstruction_loss = 0.0 * F.binary_cross_entropy_with_logits(objs.sum(dim=1), (obs.mean(dim=1) > 0).to(torch.float32))
 
         first_masks = F.sigmoid(objs[:, self.pairs[:, 0]])
         second_masks = F.sigmoid(objs[:, self.pairs[:, 1]])
