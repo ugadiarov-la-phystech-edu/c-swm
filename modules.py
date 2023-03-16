@@ -116,7 +116,7 @@ class ContrastiveSWM(nn.Module):
         # Sample negative state across episodes at random
         neg_obs, neg_state = self.create_negatives_(obs, state)
 
-        self.neg_loss = self.negative_loss_(state, neg_state)
+        self.neg_loss = 0.1 * self.negative_loss_(state, neg_state)
 
         loss = self.pos_loss + self.neg_loss
 
