@@ -515,6 +515,42 @@ register(
 )
 
 register(
+    'ShapesOneStaticBoxTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 0,
+        'n_static_boxes': 1,
+        'static_goals': True,
+        'width': 5,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': False,
+    },
+)
+
+register(
+    'ShapesOneStaticBoxEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 0,
+        'n_static_boxes': 1,
+        'static_goals': True,
+        'width': 5,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': False,
+    },
+)
+
+register(
     'ShapesOneStaticGoalTrain-v0',
     entry_point='envs.push:Push',
     max_episode_steps=100,
