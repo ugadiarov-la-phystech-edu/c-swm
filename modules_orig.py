@@ -128,7 +128,7 @@ class ContrastiveSWM(nn.Module):
             zeros, self.hinge - self.energy(
                 state, action, neg_state, no_trans=True)).mean()
 
-        reconstruction_loss = 0.001 * F.binary_cross_entropy_with_logits(objs.sum(dim=1), (obs.mean(dim=1) > 0).to(torch.float32))
+        reconstruction_loss = 1.0 * F.mse_loss(torch.sigmoid(objs).sum(dim=1), (obs.mean(dim=1) > 0).to(torch.float32))
         loss = self.pos_loss + self.neg_loss + reconstruction_loss
 
         return loss, {'transition_loss': self.pos_loss.item(), 'contrastive_loss': self.neg_loss.item(), 'reconstruction_loss': reconstruction_loss.item()}
