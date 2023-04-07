@@ -220,9 +220,35 @@ class Push(gym.Env):
         state = np.full(shape=[self.w, self.w], fill_value=-1, dtype=np.int32)
 
         # sample random locations for objects
-        locs = self.np_random.choice(self.w ** 2, self.n_boxes, replace=False)
+        if self.embodied_agent:
+            is_agent_in_main_area = self.np_random.random() > 4 * (self.w - 1) / self.w / self.w
+            locs = self.np_random.choice((self.w - 2) ** 2, self.n_boxes - 1 + is_agent_in_main_area, replace=False)
+            xs, ys = np.unravel_index(locs, [self.w - 2, self.w - 2])
+            xs += 1
+            ys += 1
+            if not is_agent_in_main_area:
+                agent_loc = self.np_random.choice(4 * (self.w - 1))
+                side_id = agent_loc // (self.w - 1)
+                if side_id == 0:
+                    x = 0
+                    y = agent_loc % (self.w - 1)
+                elif side_id == 1:
+                    x = agent_loc % (self.w - 1)
+                    y = self.w - 1
+                elif side_id == 2:
+                    x = self.w - 1
+                    y = self.w - 1 - agent_loc % (self.w - 1)
+                elif side_id == 3:
+                    x = self.w - 1 - agent_loc % (self.w - 1)
+                    y = 0
+                else:
+                    raise ValueError(f'Unexpected side_id={side_id}')
 
-        xs, ys = np.unravel_index(locs, [self.w, self.w])
+                xs = np.append(x, xs)
+                ys = np.append(y, ys)
+        else:
+            locs = self.np_random.choice(self.w ** 2, self.n_boxes, replace=False)
+            xs, ys = np.unravel_index(locs, [self.w, self.w])
 
         # populate state with locations
         for i, (x, y) in enumerate(zip(xs, ys)):
@@ -276,10 +302,10 @@ class Push(gym.Env):
         done = False
         reward = Push.STEP_REWARD
 
-        if not self._is_in_grid(box_old_pos):
+        if not self._is_in_grid(box_old_pos, box_id):
             # This box is out of the game. There is nothing to do.
             pass
-        elif not self._is_in_grid(box_new_pos):
+        elif not self._is_in_grid(box_new_pos, box_id):
             reward += Push.OUT_OF_FIELD_REWARD
             if not self.border_walls:
                 # push out of grid, destroy object or finish episode if an agent is out of the grid
@@ -299,7 +325,7 @@ class Push(gym.Env):
                 if another_box_type == Push.BOX:
                     if self.ternary_interactions:
                         another_box_new_pos = box_new_pos + vec
-                        if self._is_in_grid(another_box_new_pos):
+                        if self._is_in_grid(another_box_new_pos, another_box_id):
                             if self._is_free_cell(another_box_new_pos):
                                 self._move(another_box_id, another_box_new_pos)
                                 self._move(box_id, box_new_pos)
@@ -348,8 +374,11 @@ class Push(gym.Env):
 
         return self._get_observation(), reward, done, {}
 
-    def _is_in_grid(self, point):
-        return (0 <= point[0] < self.w) and (0 <= point[1] < self.w)
+    def _is_in_grid(self, point, box_id):
+        if not self.embodied_agent or box_id == 0:
+            return (0 <= point[0] < self.w) and (0 <= point[1] < self.w)
+
+        return (1 <= point[0] < self.w - 1) and (1 <= point[1] < self.w - 1)
 
     def print(self, message=''):
         state = self.state
@@ -495,7 +524,7 @@ if __name__ == "__main__":
     If called without arguments, starts an interactive game played with wasd to move, q to quit.
     """
     env = Push(n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, observation_type='shapes', border_walls=True,
-               channels_first=False, width=5, embodied_agent=False, render_scale=10, return_state=False)
+               channels_first=False, width=7, embodied_agent=True, render_scale=10, return_state=False, ternary_interactions=True)
 
     if len(sys.argv) > 1:
         if sys.argv[1] == "random":

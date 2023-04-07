@@ -497,7 +497,7 @@ register(
 )
 
 register(
-    'ShapesChannelWiseTernaryInteractionsTrain-v0',
+    'ShapesChannelWiseTernaryInteractionsBoxes5Width7Train-v0',
     entry_point='envs.push:Push',
     max_episode_steps=100,
     kwargs={
@@ -506,7 +506,7 @@ register(
         'n_boxes': 5,
         'n_goals': 0,
         'n_static_boxes': 0,
-        'width': 5,
+        'width': 7,
         'render_scale': 10,
         'max_episode_steps': 100,
         'channel_wise': True,
@@ -515,7 +515,7 @@ register(
 )
 
 register(
-    'ShapesChannelWiseTernaryInteractionsEval-v0',
+    'ShapesChannelWiseTernaryInteractionsBoxes5Width7Eval-v0',
     entry_point='envs.push:Push',
     max_episode_steps=100,
     kwargs={
@@ -524,11 +524,49 @@ register(
         'n_boxes': 5,
         'n_goals': 0,
         'n_static_boxes': 0,
-        'width': 5,
+        'width': 7,
         'render_scale': 10,
         'max_episode_steps': 100,
         'channel_wise': True,
         'ternary_interactions': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseTernaryInteractionsBoxes5Width7EmbodiedAgentOneStaticGoalTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 7,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'ternary_interactions': True,
+        'embodied_agent': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseTernaryInteractionsBoxes5Width7EmbodiedAgentOneStaticGoalEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 7,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'ternary_interactions': True,
+        'embodied_agent': True,
     },
 )
 
