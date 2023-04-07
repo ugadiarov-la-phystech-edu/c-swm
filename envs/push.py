@@ -107,7 +107,7 @@ class Push(gym.Env):
     def __init__(self, n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, width=5,
                  embodied_agent=False, return_state=True, observation_type='shapes', max_episode_steps=75,
                  border_walls=True, channels_first=True, channel_wise=False, channels_for_static_objects=True,
-                 seed=None, render_scale=10,
+                 seed=None, render_scale=10, ternary_interactions=False,
                  ):
         if n_static_boxes > 0:
             assert n_goals == 0 or static_goals, 'Cannot have movable goals with static objects.'
@@ -119,6 +119,7 @@ class Push(gym.Env):
         self.step_limit = max_episode_steps
         self.n_boxes = n_boxes
         self.embodied_agent = embodied_agent
+        self.ternary_interactions = ternary_interactions
 
         self.goal_ids = set()
         self.static_box_ids = set()
@@ -296,7 +297,25 @@ class Push(gym.Env):
 
             if box_type == Push.BOX:
                 if another_box_type == Push.BOX:
-                    reward += Push.COLLISION_REWARD
+                    if self.ternary_interactions:
+                        another_box_new_pos = box_new_pos + vec
+                        if self._is_in_grid(another_box_new_pos):
+                            if self._is_free_cell(another_box_new_pos):
+                                self._move(another_box_id, another_box_new_pos)
+                                self._move(box_id, box_new_pos)
+                            elif self._get_type(self._get_occupied_box_id(another_box_new_pos)) == Push.GOAL:
+                                reward += Push.HIT_GOAL_REWARD
+                                self._destroy_box(another_box_id)
+                                self._move(box_id, box_new_pos)
+                            else:
+                                reward += Push.COLLISION_REWARD
+                        else:
+                            reward += Push.OUT_OF_FIELD_REWARD
+                            if not self.border_walls:
+                                self._destroy_box(another_box_id)
+                                self._move(box_id, box_new_pos)
+                    else:
+                        reward += Push.COLLISION_REWARD
                 elif another_box_type == Push.GOAL:
                     if self.embodied_agent:
                         reward += Push.COLLISION_REWARD

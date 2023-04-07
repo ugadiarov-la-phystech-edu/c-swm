@@ -463,6 +463,42 @@ register(
 )
 
 register(
+    'ShapesChannelWiseTernaryInteractionsTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 0,
+        'n_static_boxes': 0,
+        'width': 5,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'ternary_interactions': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseTernaryInteractionsEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 0,
+        'n_static_boxes': 0,
+        'width': 5,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'ternary_interactions': True,
+    },
+)
+
+register(
     'ShapesTwoObjectsTrain-v0',
     entry_point='envs.block_pushing:BlockPushing',
     max_episode_steps=100,
