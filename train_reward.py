@@ -78,6 +78,7 @@ def main():
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--model_name', type=str, required=True)
     parser.add_argument('--num_workers', type=int, default=4)
+    parser.add_argument('--object_wise', type=str, choices=['True', 'False'], default='True')
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -216,12 +217,16 @@ def main():
 
             embedding = encoder(obs)
             if args.signal == 'reward':
-                attended_action = action_converter.convert(embedding, action)[:, :, :model.action_dim]
-                target_object_id = action_converter.target_object_id(embedding, action).detach()
                 rewards = rewards.squeeze().to(torch.float32)
-                reward_object_wise = torch.zeros(rewards.size()[0], cswm_args.num_objects, dtype=torch.float32, device=device)
-                reward_object_wise[torch.arange(0, rewards.size()[0], device=device), target_object_id] = rewards
-                ground_truth = reward_object_wise.detach()
+                if args.object_wise == 'True':
+                    attended_action = action_converter.convert(embedding, action)[:, :, :model.action_dim]
+                    target_object_id = action_converter.target_object_id(embedding, action).detach()
+                    reward_object_wise = torch.zeros(rewards.size()[0], cswm_args.num_objects, dtype=torch.float32, device=device)
+                    reward_object_wise[torch.arange(0, rewards.size()[0], device=device), target_object_id] = rewards
+                    ground_truth = reward_object_wise.detach()
+                else:
+                    ground_truth = rewards
+                    attended_action = action
             else:
                 ground_truth = returns.to(torch.float32).squeeze()
                 assert args.ignore_action
@@ -233,6 +238,8 @@ def main():
 
             if args.signal == 'reward' or torch.count_nonzero(is_terminal).item() == 0:
                 prediction = model([embedding, attended_action, False])[0].squeeze(dim=-1)
+                if args.object_wise != 'True':
+                    prediction = prediction.sum(-1)
                 loss = functional.mse_loss(prediction, ground_truth)
             else:
                 is_not_terminal = ~is_terminal
