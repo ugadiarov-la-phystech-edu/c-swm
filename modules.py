@@ -782,7 +782,7 @@ class ActionConverter:
 
         assert self.attention_module is None or self.action_dim == self.attention_module.action_size
 
-    def target_object_id(self, state, action, return_actions=False):
+    def target_object_id(self, state, action, return_actions=False, n_candidates=1):
         if self.attention_module is None:
             if return_actions:
                 return None, action
@@ -796,7 +796,10 @@ class ActionConverter:
 
         weights = self.attention_module.forward_weights([state, action])
 
-        target_object_id = torch.argmax(weights, dim=1)
+        if n_candidates == 1:
+            target_object_id = torch.argmax(weights, dim=1)
+        else:
+            target_object_id = torch.topk(weights, k=n_candidates, dim=1).indices
         if return_actions:
             return target_object_id, action
 
