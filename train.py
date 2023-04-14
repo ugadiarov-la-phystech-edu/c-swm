@@ -76,6 +76,7 @@ parser.add_argument('--value_size', type=int, default=512)
 parser.add_argument('--pretrained_cswm_path', type=str)
 parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
+parser.add_argument('--use_gt_attention', type=str, choices=['True', 'False'])
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -141,6 +142,9 @@ if args.hard_attention == 'True':
     model_args['value_size'] = args.value_size
     model_args['num_layers'] = args.num_layers
     model = modules.ContrastiveSWMHA(**model_args)
+elif args.use_gt_attention == 'True':
+    model_args['num_layers'] = args.num_layers
+    model = modules.ContrastiveSWM(**model_args)
 else:
     model = modules_orig.ContrastiveSWM(**model_args)
 
@@ -235,12 +239,13 @@ for epoch in range(1, args.epochs + 1):
 
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = [tensor.to(device) for tensor in data_batch]
-        obs, action, next_obs, _, _, is_terminal = data_batch
+        obs, action, moving_boxes, next_obs, _, _, is_terminal = data_batch
         if torch.all(is_terminal).item():
             continue
 
         obs = obs[~is_terminal]
         action = action[~is_terminal]
+        moving_boxes = moving_boxes[~is_terminal]
         next_obs = next_obs[~is_terminal]
 
         obs /= args.pixel_scale
@@ -258,11 +263,15 @@ for epoch in range(1, args.epochs + 1):
 
             next_state_pred = state + model.transition_model(state, action)
             next_rec = torch.sigmoid(decoder(next_state_pred))
-            next_loss = F.binary_cross_entropy(
-                next_rec, next_obs,
-                reduction='sum') / obs.size(0)
+            next_loss = F.binary_cross_entropy(next_rec, next_obs, reduction='sum') / obs.size(0)
             loss += next_loss
         else:
+            if args.use_gt_attention == 'True':
+                action = utils.to_one_hot(action, args.action_dim).repeat(1, args.num_objects).view(-1,
+                                                                                                    args.num_objects,
+                                                                                                    args.action_dim)
+                action[moving_boxes == 0] = torch.zeros_like(action[0][0])
+
             loss, metrics = model.contrastive_loss(obs, action, next_obs)
             for key, value in metrics.items():
                 epoch_metrics[key] += value * obs.size(0)
@@ -280,8 +289,8 @@ for epoch in range(1, args.epochs + 1):
                 'Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.8f}'.format(
                     epoch, batch_idx * len(data_batch[0]),
                     len(train_loader.dataset),
-                    100. * batch_idx / len(train_loader),
-                    loss.item() / len(data_batch[0])))
+                           100. * batch_idx / len(train_loader),
+                           loss.item() / len(data_batch[0])))
 
         step += 1
 

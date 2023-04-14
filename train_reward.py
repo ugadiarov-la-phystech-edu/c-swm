@@ -79,6 +79,7 @@ def main():
     parser.add_argument('--model_name', type=str, required=True)
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--object_wise', type=str, choices=['True', 'False'], default='True')
+    parser.add_argument('--use_gt_attention', type=str, choices=['True', 'False'])
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -153,14 +154,17 @@ def main():
         'encoder': cswm_args.encoder,
         'shuffle_objects': cswm_args.shuffle_objects,
         'use_interactions': cswm_args.use_interactions == 'True',
-        'num_layers': cswm_args.num_layers,
     }
 
     if cswm_args.hard_attention == 'True':
         cswm_model_args['key_query_size'] = cswm_args.key_query_size
         cswm_model_args['value_size'] = cswm_args.value_size
+        cswm_model_args['num_layers'] = cswm_args.num_layers
         cswm = modules.ContrastiveSWMHA(**cswm_model_args).to(device)
         action_converter = modules.ActionConverter(cswm_args.action_dim, attention_module=cswm.attention)
+    elif args.use_gt_attention == 'True':
+        cswm_model_args['num_layers'] = cswm_args.num_layers
+        cswm = modules.ContrastiveSWM(**cswm_model_args).to(device)
     else:
         cswm = modules.ContrastiveSWM(**cswm_model_args).to(device)
         action_converter = modules.ActionConverter(cswm_args.action_dim, attention_module=None)
@@ -202,7 +206,7 @@ def main():
 
         for batch_idx, data_batch in enumerate(train_loader):
             data_batch = [tensor.to(device) for tensor in data_batch]
-            obs, action, next_obs, rewards, returns, is_terminal = data_batch
+            obs, action, moving_boxes, next_obs, rewards, returns, is_terminal = data_batch
             obs /= cswm_args.pixel_scale
             next_obs /= cswm_args.pixel_scale
             if args.signal == 'reward' or use_next_state:
@@ -211,6 +215,7 @@ def main():
 
                 obs = obs[~is_terminal]
                 action = action[~is_terminal]
+                moving_boxes = moving_boxes[~is_terminal]
                 next_obs = next_obs[~is_terminal]
                 rewards = rewards[~is_terminal]
                 returns = returns[~is_terminal]
@@ -221,12 +226,19 @@ def main():
                 if args.object_wise == 'True':
                     attended_action = action_converter.convert(embedding, action)[:, :, :model.action_dim]
                     target_object_id = action_converter.target_object_id(embedding, action).detach()
-                    reward_object_wise = torch.zeros(rewards.size()[0], cswm_args.num_objects, dtype=torch.float32, device=device)
+                    reward_object_wise = torch.zeros(rewards.size()[0], cswm_args.num_objects, dtype=torch.float32,
+                                                     device=device)
                     reward_object_wise[torch.arange(0, rewards.size()[0], device=device), target_object_id] = rewards
                     ground_truth = reward_object_wise.detach()
                 else:
                     ground_truth = rewards
                     attended_action = action
+                    if args.use_gt_attention:
+                        attended_action = utils.to_one_hot(attended_action, args.action_dim)
+                        attended_action = attended_action.repeat(1, cswm_args.num_objects).view(-1,
+                                                                                                cswm_args.num_objects,
+                                                                                                args.action_dim)
+                        attended_action[moving_boxes == 0] = torch.zeros_like(attended_action[0][0])
             else:
                 ground_truth = returns.to(torch.float32).squeeze()
                 assert args.ignore_action
@@ -281,7 +293,7 @@ def main():
             best_loss = avg_loss
             torch.save(model.state_dict(), model_file)
             torch.save(encoder.state_dict(), encoder_file)
-            if action_converter.attention_module is not None:
+            if args.use_gt_attention != 'True' and action_converter.attention_module is not None:
                 torch.save(action_converter.attention_module.state_dict(), attention_file)
 
 

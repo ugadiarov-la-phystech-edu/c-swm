@@ -144,10 +144,11 @@ if __name__ == '__main__':
                 add_observation(use_rle, replay_buffer[i], ob[1])
 
                 action = agent.act(ob, reward, done)
-                ob, reward, done, _ = env.step(action)
+                ob, reward, done, info = env.step(action)
 
                 replay_buffer[i]['action'].append(action)
                 replay_buffer[i]['reward'].append(reward)
+                replay_buffer[i][Push.MOVING_BOXES_KEY].append(info[Push.MOVING_BOXES_KEY])
                 add_observation(use_rle, replay_buffer[i], ob[1], next_obs=True)
 
                 if done:
