@@ -625,7 +625,7 @@ class AttentionV1(nn.Module):
         self.fc_query = MLP(self.action_size, self.key_query_size, self.HIDDEN_SIZE)
         self.fc_value = MLP(self.action_size, self.value_size, self.HIDDEN_SIZE)
 
-    def forward(self, x):
+    def forward(self, x, return_weights=False):
         state, action = x
 
         # flatten state
@@ -653,6 +653,9 @@ class AttentionV1(nn.Module):
         # create a separate action for each object slot
         # weights: [|B|, |O|], value: [|B|, value_size]
         # => [|B|, |O|, value_size]
+        if return_weights:
+            return weights[:, :, None] * value[:, None, :], weights
+
         return weights[:, :, None] * value[:, None, :]
 
     def forward_weights(self, x):
@@ -774,52 +777,73 @@ class ContrastiveSWMHA(ContrastiveSWM):
         return new_action
 
 
+class ContrastiveSWMSA(ContrastiveSWM):
+    def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim, num_objects, hinge=1., sigma=0.5,
+                 encoder='large', ignore_action=False, copy_action=False, shuffle_objects=False, use_interactions=True,
+                 num_layers=3, key_query_size=512, value_size=512):
+        super().__init__(embedding_dim, input_dims, hidden_dim, action_dim, num_objects, hinge, sigma, encoder,
+                         ignore_action, copy_action, shuffle_objects, use_interactions, num_layers)
+
+        self.attention = AttentionV1(
+            state_size=self.embedding_dim,
+            action_size=self.action_dim,
+            key_query_size=key_query_size,
+            value_size=value_size,
+            sqrt_scale=True,
+            use_sigmoid=False
+        )
+
+        del self.transition_model
+        self.transition_model = TransitionGNN(
+            input_dim=embedding_dim,
+            hidden_dim=hidden_dim,
+            action_dim=value_size,
+            num_objects=num_objects,
+            ignore_action=ignore_action,
+            copy_action=copy_action,
+            use_interactions=self.use_interactions,
+            num_layers=self.num_layers,
+        )
+
+    def forward_transition(self, state, action):
+
+        if len(action.shape) == 1:
+            action = utils.to_one_hot(action, self.action_dim)
+        else:
+            assert len(action.shape) == 2
+        action = self.attention([state, action])
+
+        pred_trans, _, _ = self.transition_model([state, action, False])
+        return state + pred_trans
+
+
 class ActionConverter:
-    def __init__(self, action_dim: int, attention_module: AttentionV1 = None):
+    def __init__(self, action_dim: int, attention: str, attention_module: AttentionV1 = None):
         super().__init__()
         self.action_dim = action_dim
         self.attention_module = attention_module
+        self.attention = attention
+        assert attention in ('soft', 'hard'), f'Invalid attention type {attention}'
 
         assert self.attention_module is None or self.action_dim == self.attention_module.action_size
 
-    def target_object_id(self, state, action, return_actions=False, n_candidates=1, return_weights=False):
-        if self.attention_module is None:
-            if return_actions:
-                return None, action
-
-            return None
-
+    def to_one_hot(self, action):
         if len(action.shape) == 1:
             action = utils.to_one_hot(action, self.attention_module.action_size)
         else:
             assert len(action.shape) == 2
 
+        return action
+
+    def actions_weights(self, state, action):
+        action = self.to_one_hot(action)
+        if self.attention == 'soft':
+            return self.attention_module([state, action], return_weights=True)
+
         weights = self.attention_module.forward_weights([state, action])
-        if n_candidates < 1:
-            n_candidates = weights.size()[1]
-
-        result = None
-        if n_candidates == 1:
-            result = torch.max(weights, dim=1)
-        else:
-            result = torch.topk(weights, k=n_candidates, dim=1)
-
-        result = result[::-1]
-
-        if not return_weights:
-            result = result[:1]
-
-        if return_actions:
-            return (*result, action)
-
-        return result
-
-    def convert(self, state, action):
-        target_object_id, action = self.target_object_id(state, action, return_actions=True)
-        if target_object_id is None:
-            return action
-
-        return self.action_to_target_node(action, target_object_id, state.size()[1])
+        target_object_id = torch.max(weights, dim=1)[1]
+        action = self.action_to_target_node(action, target_object_id, state.size()[1])
+        return action, weights
 
     def action_to_target_node(self, action, node_idx, num_objects):
         new_action = torch.zeros(

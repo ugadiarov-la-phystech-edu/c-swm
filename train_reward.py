@@ -6,6 +6,7 @@ import torch
 from torch import nn
 from torch.nn import functional
 
+import modules_orig
 import utils
 import datetime
 import os
@@ -79,7 +80,6 @@ def main():
     parser.add_argument('--model_name', type=str, required=True)
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--object_wise', type=str, choices=['True', 'False'], default='True')
-    parser.add_argument('--use_gt_attention', type=str, choices=['True', 'False'])
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -113,13 +113,16 @@ def main():
     logger.addHandler(logging.FileHandler(log_file, 'a'))
     print = logger.info
 
-    pickle.dump({'args': args}, open(meta_file, "wb"))
-
-    device = torch.device('cuda' if args.cuda else 'cpu')
-
     cswm_meta_file = os.path.join(args.pretrained_cswm_path, 'metadata.pkl')
     cswm_model_file = os.path.join(args.pretrained_cswm_path, 'model.pt')
     cswm_args = pickle.load(open(cswm_meta_file, 'rb'))['args']
+
+    if cswm_args.attention == 'soft':
+        args.action_dim = cswm_args.value_size
+
+    pickle.dump({'args': args}, open(meta_file, "wb"))
+
+    device = torch.device('cuda' if args.cuda else 'cpu')
 
     if args.action_dim != cswm_args.action_dim:
         warnings.warn(f'args.action_dim={args.action_dim} cswm_args.action_dim={cswm_args.action_dim}')
@@ -156,18 +159,24 @@ def main():
         'use_interactions': cswm_args.use_interactions == 'True',
     }
 
-    if cswm_args.hard_attention == 'True':
+    action_converter = None
+    if cswm_args.attention == 'hard':
         cswm_model_args['key_query_size'] = cswm_args.key_query_size
         cswm_model_args['value_size'] = cswm_args.value_size
         cswm_model_args['num_layers'] = cswm_args.num_layers
         cswm = modules.ContrastiveSWMHA(**cswm_model_args).to(device)
-        action_converter = modules.ActionConverter(cswm_args.action_dim, attention_module=cswm.attention)
-    elif args.use_gt_attention == 'True':
+        action_converter = modules.ActionConverter(cswm_args.action_dim, attention=cswm_args.attention, attention_module=cswm.attention)
+    elif cswm_args.attention == 'soft':
+        cswm_model_args['key_query_size'] = cswm_args.key_query_size
+        cswm_model_args['value_size'] = cswm_args.value_size
+        cswm_model_args['num_layers'] = cswm_args.num_layers
+        cswm = modules.ContrastiveSWMSA(**cswm_model_args).to(device)
+        action_converter = modules.ActionConverter(cswm_args.action_dim, attention=cswm_args.attention, attention_module=cswm.attention)
+    elif cswm_args.attention == 'ground_truth':
         cswm_model_args['num_layers'] = cswm_args.num_layers
         cswm = modules.ContrastiveSWM(**cswm_model_args).to(device)
     else:
-        cswm = modules.ContrastiveSWM(**cswm_model_args).to(device)
-        action_converter = modules.ActionConverter(cswm_args.action_dim, attention_module=None)
+        cswm = modules_orig.ContrastiveSWM(**cswm_model_args).to(device)
 
     cswm.load_state_dict(torch.load(cswm_model_file))
     cswm = cswm.eval()
@@ -222,23 +231,31 @@ def main():
 
             embedding = encoder(obs)
             if args.signal == 'reward':
-                rewards = rewards.squeeze().to(torch.float32)
-                if args.object_wise == 'True':
-                    attended_action = action_converter.convert(embedding, action)[:, :, :model.action_dim]
-                    target_object_id = action_converter.target_object_id(embedding, action).detach()
-                    reward_object_wise = torch.zeros(rewards.size()[0], cswm_args.num_objects, dtype=torch.float32,
-                                                     device=device)
-                    reward_object_wise[torch.arange(0, rewards.size()[0], device=device), target_object_id] = rewards
-                    ground_truth = reward_object_wise.detach()
+                rewards = rewards.to(torch.float32).unsqueeze(-1)
+
+                if cswm_args.attention in ('soft', 'hard'):
+                    attended_action, weight = action_converter.actions_weights(embedding, action)
+                    if cswm_args.attention == 'hard':
+                        attended_action = attended_action[:, :, :model.action_dim]
+                        index_max = torch.argmax(weight, dim=1)
+                        weight = torch.zeros_like(weight)
+                        weight[torch.arange(weight.size()[0], device=device), index_max] = 1
+
+                    ground_truth = weight * rewards
+                elif cswm_args.attention == 'ground_truth':
+                    attended_action = utils.to_one_hot(action, args.action_dim)
+                    attended_action = attended_action.repeat(1, cswm_args.num_objects).view(-1,
+                                                                                            cswm_args.num_objects,
+                                                                                            args.action_dim)
+                    attended_action[moving_boxes == 0] = torch.zeros_like(attended_action[0][0])
+                    ground_truth = moving_boxes / moving_boxes.sum(-1, keepdims=True) * rewards
                 else:
-                    ground_truth = rewards
                     attended_action = action
-                    if args.use_gt_attention:
-                        attended_action = utils.to_one_hot(attended_action, args.action_dim)
-                        attended_action = attended_action.repeat(1, cswm_args.num_objects).view(-1,
-                                                                                                cswm_args.num_objects,
-                                                                                                args.action_dim)
-                        attended_action[moving_boxes == 0] = torch.zeros_like(attended_action[0][0])
+                    ground_truth = torch.ones(*embedding.size()[:-1], dtype=torch.float32, device=device)
+                    ground_truth *= rewards / ground_truth.sum(-1, keepdims=True)
+
+                if args.object_wise != 'True':
+                    ground_truth = rewards
             else:
                 ground_truth = returns.to(torch.float32).squeeze()
                 assert args.ignore_action
@@ -251,7 +268,7 @@ def main():
             if args.signal == 'reward' or torch.count_nonzero(is_terminal).item() == 0:
                 prediction = model([embedding, attended_action, False])[0].squeeze(dim=-1)
                 if args.object_wise != 'True':
-                    prediction = prediction.sum(-1)
+                    prediction = prediction.sum(-1, keepdims=True)
                 loss = functional.mse_loss(prediction, ground_truth)
             else:
                 is_not_terminal = ~is_terminal
@@ -293,7 +310,7 @@ def main():
             best_loss = avg_loss
             torch.save(model.state_dict(), model_file)
             torch.save(encoder.state_dict(), encoder_file)
-            if args.use_gt_attention != 'True' and action_converter.attention_module is not None:
+            if action_converter is not None:
                 torch.save(action_converter.attention_module.state_dict(), attention_file)
 
 

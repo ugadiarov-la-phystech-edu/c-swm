@@ -69,14 +69,13 @@ parser.add_argument('--save-folder', type=str,
 parser.add_argument('--pixel-scale', type=float, required=True, help='Normalize pixel values in observation.')
 parser.add_argument('--shuffle-objects', type=bool, default=False)
 parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
-parser.add_argument('--hard_attention', type=str, choices=['True', 'False'], required=True)
+parser.add_argument('--attention', type=str, choices=['hard', 'soft', 'ground_truth', 'none'], required=True)
 parser.add_argument('--num_layers', type=int, default=3)
 parser.add_argument('--key_query_size', type=int, default=512)
 parser.add_argument('--value_size', type=int, default=512)
 parser.add_argument('--pretrained_cswm_path', type=str)
 parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
-parser.add_argument('--use_gt_attention', type=str, choices=['True', 'False'])
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -137,12 +136,17 @@ model_args = {
     'use_interactions': args.use_interactions == 'True',
 }
 
-if args.hard_attention == 'True':
+if args.attention == 'hard':
     model_args['key_query_size'] = args.key_query_size
     model_args['value_size'] = args.value_size
     model_args['num_layers'] = args.num_layers
     model = modules.ContrastiveSWMHA(**model_args)
-elif args.use_gt_attention == 'True':
+elif args.attention == 'soft':
+    model_args['key_query_size'] = args.key_query_size
+    model_args['value_size'] = args.value_size
+    model_args['num_layers'] = args.num_layers
+    model = modules.ContrastiveSWMSA(**model_args)
+elif args.attention == 'ground_truth':
     model_args['num_layers'] = args.num_layers
     model = modules.ContrastiveSWM(**model_args)
 else:
@@ -174,13 +178,21 @@ if args.pretrained_cswm_path is not None:
         'use_interactions': pretrained_cswm_args.use_interactions == 'True',
     }
 
-    if pretrained_cswm_args.hard_attention == 'True':
+    if pretrained_cswm_args.attention == 'hard':
         cswm_model_args['key_query_size'] = pretrained_cswm_args.key_query_size
         cswm_model_args['value_size'] = pretrained_cswm_args.value_size
         cswm_model_args['num_layers'] = pretrained_cswm_args.num_layers
-        cswm = modules.ContrastiveSWMHA(**cswm_model_args).to(device)
+        cswm = modules.ContrastiveSWMHA(**cswm_model_args)
+    elif pretrained_cswm_args.attention == 'soft':
+        cswm_model_args['key_query_size'] = pretrained_cswm_args.key_query_size
+        cswm_model_args['value_size'] = pretrained_cswm_args.value_size
+        cswm_model_args['num_layers'] = pretrained_cswm_args.num_layers
+        cswm = modules.ContrastiveSWMSA(**cswm_model_args)
+    elif pretrained_cswm_args.attention == 'ground_truth':
+        cswm_model_args['num_layers'] = pretrained_cswm_args.num_layers
+        cswm = modules.ContrastiveSWM(**cswm_model_args)
     else:
-        cswm = modules_orig.ContrastiveSWM(**cswm_model_args).to(device)
+        cswm = modules_orig.ContrastiveSWM(**cswm_model_args)
 
     cswm.load_state_dict(torch.load(pretrained_cswm_model_file))
     cswm = cswm.eval()
@@ -266,7 +278,7 @@ for epoch in range(1, args.epochs + 1):
             next_loss = F.binary_cross_entropy(next_rec, next_obs, reduction='sum') / obs.size(0)
             loss += next_loss
         else:
-            if args.use_gt_attention == 'True':
+            if args.attention == 'ground_truth':
                 action = utils.to_one_hot(action, args.action_dim).repeat(1, args.num_objects).view(-1,
                                                                                                     args.num_objects,
                                                                                                     args.action_dim)
