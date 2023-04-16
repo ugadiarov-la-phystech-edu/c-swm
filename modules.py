@@ -818,31 +818,42 @@ class ContrastiveSWMSA(ContrastiveSWM):
 
 
 class ActionConverter:
-    def __init__(self, action_dim: int, attention: str, attention_module: AttentionV1 = None):
+    def __init__(self, action_dim: int, attention: str, attention_module):
         super().__init__()
         self.action_dim = action_dim
         self.attention_module = attention_module
         self.attention = attention
-        assert attention in ('soft', 'hard'), f'Invalid attention type {attention}'
-
-        assert self.attention_module is None or self.action_dim == self.attention_module.action_size
+        assert attention in ('soft', 'hard', 'gnn'), f'Invalid attention type {attention}'
+        if attention == 'gnn':
+            assert self.action_dim == attention_module.action_dim
+        else:
+            assert self.action_dim == attention_module.action_size
 
     def to_one_hot(self, action):
         if len(action.shape) == 1:
-            action = utils.to_one_hot(action, self.attention_module.action_size)
+            action = utils.to_one_hot(action, self.action_dim)
         else:
             assert len(action.shape) == 2
 
         return action
 
     def actions_weights(self, state, action):
+        batch_size, num_objects, _ = state.size()
+
+        orig_action = action
         action = self.to_one_hot(action)
+        if self.attention == 'gnn':
+            action = action.repeat(1, num_objects).view(batch_size, num_objects, self.action_dim)
+            weight = torch.sigmoid(self.attention_module([state, orig_action, False])[0])
+            action = action * weight
+            return action, weight.squeeze(dim=2)
+
         if self.attention == 'soft':
             return self.attention_module([state, action], return_weights=True)
 
         weights = self.attention_module.forward_weights([state, action])
         target_object_id = torch.max(weights, dim=1)[1]
-        action = self.action_to_target_node(action, target_object_id, state.size()[1])
+        action = self.action_to_target_node(action, target_object_id, num_objects)
         return action, weights
 
     def action_to_target_node(self, action, node_idx, num_objects):

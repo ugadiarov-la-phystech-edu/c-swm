@@ -69,7 +69,7 @@ parser.add_argument('--save-folder', type=str,
 parser.add_argument('--pixel-scale', type=float, required=True, help='Normalize pixel values in observation.')
 parser.add_argument('--shuffle-objects', type=bool, default=False)
 parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
-parser.add_argument('--attention', type=str, choices=['hard', 'soft', 'ground_truth', 'none'], required=True)
+parser.add_argument('--attention', type=str, choices=['hard', 'soft', 'ground_truth', 'none', 'gnn'], required=True)
 parser.add_argument('--num_layers', type=int, default=3)
 parser.add_argument('--key_query_size', type=int, default=512)
 parser.add_argument('--value_size', type=int, default=512)
@@ -100,6 +100,7 @@ if not os.path.exists(save_folder):
     os.makedirs(save_folder)
 meta_file = os.path.join(save_folder, 'metadata.pkl')
 model_file = os.path.join(save_folder, 'model.pt')
+attention_file = os.path.join(save_folder, 'attention.pt')
 log_file = os.path.join(save_folder, 'log.txt')
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -136,6 +137,7 @@ model_args = {
     'use_interactions': args.use_interactions == 'True',
 }
 
+attention = None
 if args.attention == 'hard':
     model_args['key_query_size'] = args.key_query_size
     model_args['value_size'] = args.value_size
@@ -149,6 +151,19 @@ elif args.attention == 'soft':
 elif args.attention == 'ground_truth':
     model_args['num_layers'] = args.num_layers
     model = modules.ContrastiveSWM(**model_args)
+elif args.attention == 'gnn':
+    model = modules.ContrastiveSWM(**model_args)
+    attention = modules.TransitionGNN(
+        input_dim=args.embedding_dim,
+        hidden_dim=args.hidden_dim,
+        action_dim=args.action_dim,
+        num_objects=args.num_objects,
+        ignore_action=False,
+        copy_action=True,
+        use_interactions=args.use_interactions == 'True',
+        output_dim=1,
+    ).to(device)
+    attention.apply(utils.weights_init)
 else:
     model = modules_orig.ContrastiveSWM(**model_args)
 
@@ -202,9 +217,10 @@ if args.pretrained_cswm_path is not None:
     model.obj_extractor = cswm.obj_extractor
     del cswm
 
-optimizer = torch.optim.Adam(
-    model.parameters(),
-    lr=args.learning_rate)
+parameters = list(model.parameters())
+if attention is not None:
+    parameters += list(attention.parameters())
+optimizer = torch.optim.Adam(parameters, lr=args.learning_rate)
 
 if args.decoder:
     if args.encoder == 'large':
@@ -278,11 +294,16 @@ for epoch in range(1, args.epochs + 1):
             next_loss = F.binary_cross_entropy(next_rec, next_obs, reduction='sum') / obs.size(0)
             loss += next_loss
         else:
-            if args.attention == 'ground_truth':
+            if args.attention in ('gnn', 'ground_truth'):
+                orig_action = action
                 action = utils.to_one_hot(action, args.action_dim).repeat(1, args.num_objects).view(-1,
                                                                                                     args.num_objects,
                                                                                                     args.action_dim)
-                action[moving_boxes == 0] = torch.zeros_like(action[0][0])
+                if args.attention == 'ground_truth':
+                    action[moving_boxes == 0] = torch.zeros_like(action[0][0])
+                else:
+                    embedding = model.obj_encoder(model.obj_extractor(obs))
+                    action = action * torch.sigmoid(attention([embedding, orig_action, False])[0])
 
             loss, metrics = model.contrastive_loss(obs, action, next_obs)
             for key, value in metrics.items():
@@ -319,3 +340,4 @@ for epoch in range(1, args.epochs + 1):
     if avg_loss < best_loss:
         best_loss = avg_loss
         torch.save(model.state_dict(), model_file)
+        torch.save(attention.state_dict(), attention_file)

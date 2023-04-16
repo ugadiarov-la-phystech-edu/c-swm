@@ -175,6 +175,26 @@ def main():
     elif cswm_args.attention == 'ground_truth':
         cswm_model_args['num_layers'] = cswm_args.num_layers
         cswm = modules.ContrastiveSWM(**cswm_model_args).to(device)
+    elif cswm_args.attention == 'gnn':
+        cswm_model_args['num_layers'] = cswm_args.num_layers
+        cswm = modules.ContrastiveSWM(**cswm_model_args).to(device)
+        attention = modules.TransitionGNN(
+            input_dim=cswm_args.embedding_dim,
+            hidden_dim=cswm_args.hidden_dim,
+            action_dim=cswm_args.action_dim,
+            num_objects=cswm_args.num_objects,
+            ignore_action=False,
+            copy_action=True,
+            use_interactions=cswm_args.use_interactions == 'True',
+            output_dim=1,
+        ).to(device)
+        attention.load_state_dict(torch.load(attention_file))
+        attention = attention.eval()
+        for param in attention.parameters():
+            param.requires_grad = False
+
+        action_converter = modules.ActionConverter(cswm_args.action_dim, attention=cswm_args.attention,
+                                                   attention_module=attention)
     else:
         cswm = modules_orig.ContrastiveSWM(**cswm_model_args).to(device)
 
@@ -233,7 +253,7 @@ def main():
             if args.signal == 'reward':
                 rewards = rewards.to(torch.float32).unsqueeze(-1)
 
-                if cswm_args.attention in ('soft', 'hard'):
+                if cswm_args.attention in ('soft', 'hard', 'gnn'):
                     attended_action, weight = action_converter.actions_weights(embedding, action)
                     if cswm_args.attention == 'hard':
                         attended_action = attended_action[:, :, :model.action_dim]
@@ -241,7 +261,7 @@ def main():
                         weight = torch.zeros_like(weight)
                         weight[torch.arange(weight.size()[0], device=device), index_max] = 1
 
-                    ground_truth = weight * rewards
+                    ground_truth = weight * rewards / weight.sum(-1, keepdims=True)
                 elif cswm_args.attention == 'ground_truth':
                     attended_action = utils.to_one_hot(action, args.action_dim)
                     attended_action = attended_action.repeat(1, cswm_args.num_objects).view(-1,
