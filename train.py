@@ -70,6 +70,7 @@ parser.add_argument('--pixel-scale', type=float, required=True, help='Normalize 
 parser.add_argument('--shuffle-objects', type=bool, default=False)
 parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
 parser.add_argument('--attention', type=str, choices=['hard', 'soft', 'ground_truth', 'none', 'gnn'], required=True)
+parser.add_argument('--use_gt_attention', type=str, choices=['True', 'False'], default='False')
 parser.add_argument('--num_layers', type=int, default=3)
 parser.add_argument('--key_query_size', type=int, default=512)
 parser.add_argument('--value_size', type=int, default=512)
@@ -294,6 +295,7 @@ for epoch in range(1, args.epochs + 1):
             next_loss = F.binary_cross_entropy(next_rec, next_obs, reduction='sum') / obs.size(0)
             loss += next_loss
         else:
+            loss = 0
             if args.attention in ('gnn', 'ground_truth'):
                 orig_action = action
                 action = utils.to_one_hot(action, args.action_dim).repeat(1, args.num_objects).view(-1,
@@ -303,9 +305,17 @@ for epoch in range(1, args.epochs + 1):
                     action[moving_boxes == 0] = torch.zeros_like(action[0][0])
                 else:
                     embedding = model.obj_encoder(model.obj_extractor(obs))
-                    action = action * torch.sigmoid(attention([embedding, orig_action, False])[0])
+                    logit = attention([embedding, orig_action, False])[0]
+                    if args.use_gt_attention == 'True':
+                        loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                            logit.squeeze(dim=2), moving_boxes.to(torch.float32)
+                        )
+                        epoch_metrics['attention_loss'] += loss.item() * obs.size()[0]
 
-            loss, metrics = model.contrastive_loss(obs, action, next_obs)
+                    action = action * torch.sigmoid(logit)
+
+            loss_contrastive, metrics = model.contrastive_loss(obs, action, next_obs)
+            loss += loss_contrastive
             for key, value in metrics.items():
                 epoch_metrics[key] += value * obs.size(0)
 
