@@ -218,7 +218,7 @@ class Push(gym.Env):
         return image
 
     def reset(self):
-        state = np.full(shape=[self.w, self.w], fill_value=-1, dtype=np.int32)
+        self._clear_state()
 
         # sample random locations for objects
         if self.embodied_agent:
@@ -253,16 +253,22 @@ class Push(gym.Env):
 
         # populate state with locations
         for i, (x, y) in enumerate(zip(xs, ys)):
-            state[x, y] = i
-            self.box_pos[i, :] = x, y
+            self._set_position(box_id=i, x=x, y=y)
 
-        self.state = state
         self.steps_taken = 0
         self.n_boxes_in_game = self.n_boxes - len(self.goal_ids) - int(self.embodied_agent)
         if not self.embodied_agent:
             self.n_boxes_in_game -= len(self.static_box_ids) * int(self.static_goals)
 
         return self._get_observation()
+
+    def _clear_state(self):
+        self.state = np.full(shape=[self.w, self.w], fill_value=-1, dtype=np.int32)
+        self.box_pos = np.full(shape=(self.n_boxes, 2), fill_value=-1, dtype=np.int32)
+
+    def _set_position(self, box_id, x, y):
+        self.state[x, y] = box_id
+        self.box_pos[box_id, :] = x, y
 
     def _get_type(self, box_id):
         if box_id in self.goal_ids:

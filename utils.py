@@ -145,7 +145,7 @@ def unsorted_segment_sum(tensor, segment_ids, num_segments):
 class StateTransitionsDataset(data.Dataset):
     """Create dataset of (o_t, a_t, o_{t+1}) transitions from replay buffer."""
 
-    def __init__(self, hdf5_file, gamma=1):
+    def __init__(self, hdf5_file, hdf5_file_auxiliary=None, gamma=1):
         """
         Args:
             hdf5_file (string): Path to the hdf5 file that contains experience
@@ -155,6 +155,16 @@ class StateTransitionsDataset(data.Dataset):
         self.has_returns = False
         self.experience_buffer, self.use_rle, self.image_shape = load_list_dict_h5py(hdf5_file)
         self.n_boxes = len(self.experience_buffer[0]['moving_boxes'][0])
+
+        if hdf5_file_auxiliary is not None:
+            experience_buffer_states, use_rle_states, image_shape_states = load_list_dict_h5py(hdf5_file_auxiliary)
+            n_boxes_states = len(experience_buffer_states[0]['moving_boxes'][0])
+
+            assert use_rle_states == self.use_rle
+            assert np.array_equal(image_shape_states, self.image_shape)
+            assert n_boxes_states == self.n_boxes
+
+            self.experience_buffer += experience_buffer_states
 
         # Build table for conversion between linear idx -> episode/step idx
         self.idx2episode = list()
@@ -167,6 +177,7 @@ class StateTransitionsDataset(data.Dataset):
             step += num_steps
 
         self.num_steps = step
+        print(f'Dataset length: {self.num_steps}\n')
 
     def compute_returns(self):
         for episode in self.experience_buffer:

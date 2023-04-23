@@ -61,6 +61,8 @@ parser.add_argument('--log-interval', type=int, default=20,
 parser.add_argument('--dataset', type=str,
                     default='data/shapes_train.h5',
                     help='Path to replay buffer.')
+parser.add_argument('--dataset_auxiliary', type=str,
+                    default=None)
 parser.add_argument('--name', type=str, default='none',
                     help='Experiment name.')
 parser.add_argument('--save-folder', type=str,
@@ -112,7 +114,7 @@ print = logger.info
 device = torch.device('cuda' if args.cuda else 'cpu')
 
 dataset = utils.StateTransitionsDataset(
-    hdf5_file=args.dataset)
+    hdf5_file=args.dataset, hdf5_file_auxiliary=args.dataset_auxiliary)
 train_loader = data.DataLoader(
     dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
@@ -350,4 +352,5 @@ for epoch in range(1, args.epochs + 1):
     if avg_loss < best_loss:
         best_loss = avg_loss
         torch.save(model.state_dict(), model_file)
-        torch.save(attention.state_dict(), attention_file)
+        if attention is not None:
+            torch.save(attention.state_dict(), attention_file)
