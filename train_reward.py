@@ -198,7 +198,7 @@ def main():
         action_converter = modules.ActionConverter(cswm_args.action_dim, attention=cswm_args.attention,
                                                    attention_module=attention)
     else:
-        cswm = modules_orig.ContrastiveSWM(**cswm_model_args).to(device)
+        cswm = modules.ContrastiveSWM(**cswm_model_args).to(device)
 
     cswm.load_state_dict(torch.load(cswm_model_file))
     cswm = cswm.eval()

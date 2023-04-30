@@ -168,7 +168,7 @@ elif args.attention == 'gnn':
     ).to(device)
     attention.apply(utils.weights_init)
 else:
-    model = modules_orig.ContrastiveSWM(**model_args)
+    model = modules.ContrastiveSWM(**model_args)
 
 model = model.to(device)
 
@@ -210,7 +210,7 @@ if args.pretrained_cswm_path is not None:
         cswm_model_args['num_layers'] = pretrained_cswm_args.num_layers
         cswm = modules.ContrastiveSWM(**cswm_model_args)
     else:
-        cswm = modules_orig.ContrastiveSWM(**cswm_model_args)
+        cswm = modules.ContrastiveSWM(**cswm_model_args)
 
     cswm.load_state_dict(torch.load(pretrained_cswm_model_file))
     cswm = cswm.eval()
