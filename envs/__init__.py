@@ -510,7 +510,6 @@ register(
         'render_scale': 10,
         'max_episode_steps': 100,
         'channel_wise': True,
-        'ternary_interactions': True,
     },
 )
 
@@ -528,7 +527,6 @@ register(
         'render_scale': 10,
         'max_episode_steps': 100,
         'channel_wise': True,
-        'ternary_interactions': True,
     },
 )
 
@@ -546,7 +544,6 @@ register(
         'render_scale': 10,
         'max_episode_steps': 100,
         'channel_wise': True,
-        'ternary_interactions': True,
         'embodied_agent': True,
     },
 )
@@ -565,7 +562,6 @@ register(
         'render_scale': 10,
         'max_episode_steps': 100,
         'channel_wise': True,
-        'ternary_interactions': True,
         'embodied_agent': True,
     },
 )
@@ -584,7 +580,6 @@ register(
         'render_scale': 10,
         'max_episode_steps': 100,
         'channel_wise': True,
-        'ternary_interactions': True,
         'embodied_agent': True,
     },
 )
@@ -603,7 +598,6 @@ register(
         'render_scale': 10,
         'max_episode_steps': 100,
         'channel_wise': True,
-        'ternary_interactions': True,
         'embodied_agent': True,
     },
 )
@@ -622,7 +616,6 @@ register(
         'render_scale': 10,
         'max_episode_steps': 100,
         'channel_wise': True,
-        'ternary_interactions': True,
         'embodied_agent': True,
     },
 )
@@ -641,7 +634,6 @@ register(
         'render_scale': 10,
         'max_episode_steps': 100,
         'channel_wise': True,
-        'ternary_interactions': True,
         'embodied_agent': True,
     },
 )
@@ -660,7 +652,6 @@ register(
         'render_scale': 10,
         'max_episode_steps': 100,
         'channel_wise': True,
-        'ternary_interactions': True,
         'embodied_agent': True,
     },
 )
@@ -679,7 +670,6 @@ register(
         'render_scale': 10,
         'max_episode_steps': 100,
         'channel_wise': True,
-        'ternary_interactions': True,
         'embodied_agent': True,
     },
 )
