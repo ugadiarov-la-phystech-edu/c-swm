@@ -276,6 +276,9 @@ class TransitionGNN(torch.nn.Module):
         action_vec = None
         if not self.ignore_action:
             action_vec = self.process_action_(action, viz=viz)
+            action_vec = action_vec.view(batch_size, num_nodes, self.action_dim)
+            action_vec[:, 1:, :] = 0
+            action_vec = action_vec.view(-1, self.action_dim)
 
         edge_attr = None
         edge_index = None
@@ -286,7 +289,7 @@ class TransitionGNN(torch.nn.Module):
                 batch_size, num_nodes, device)
 
             row, col = edge_index
-            edge_attr = self._edge_model(node_attr[row], node_attr[col], action_vec[row] if self.edge_actions else None)
+            edge_attr = self._edge_model(node_attr[row], node_attr[col], action_vec[torch.minimum(row, col)] if self.edge_actions else None)
 
         if not self.ignore_action:
             # Attach action to each state
