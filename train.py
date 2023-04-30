@@ -71,6 +71,7 @@ parser.add_argument('--save-folder', type=str,
 parser.add_argument('--pixel-scale', type=float, required=True, help='Normalize pixel values in observation.')
 parser.add_argument('--shuffle-objects', type=bool, default=False)
 parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
+parser.add_argument('--edge_actions', type=str, choices=['True', 'False'], default='False')
 parser.add_argument('--attention', type=str, choices=['hard', 'soft', 'ground_truth', 'none', 'gnn'], required=True)
 parser.add_argument('--use_gt_attention', type=str, choices=['True', 'False'], default='False')
 parser.add_argument('--num_layers', type=int, default=3)
@@ -82,6 +83,9 @@ parser.add_argument('--run_id', type=str, default='run-0')
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
+
+if args.edge_actions == 'True':
+    assert args.attention in ('ground_truth', 'none'), f'Unsupported attention type={args.attention} for edge_actions={args.edge_actions}.'
 
 now = datetime.datetime.now()
 timestamp = now.isoformat()
@@ -138,6 +142,7 @@ model_args = {
     'encoder': args.encoder,
     'shuffle_objects': args.shuffle_objects,
     'use_interactions': args.use_interactions == 'True',
+    'edge_actions': args.edge_actions == 'True',
 }
 
 attention = None
@@ -194,6 +199,7 @@ if args.pretrained_cswm_path is not None:
         'encoder': pretrained_cswm_args.encoder,
         'shuffle_objects': pretrained_cswm_args.shuffle_objects,
         'use_interactions': pretrained_cswm_args.use_interactions == 'True',
+        'edge_actions': pretrained_cswm_args.edge_actions,
     }
 
     if pretrained_cswm_args.attention == 'hard':

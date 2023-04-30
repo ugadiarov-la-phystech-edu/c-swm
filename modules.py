@@ -17,9 +17,9 @@ class ContrastiveSWM(nn.Module):
         action_dim: Dimensionality of action space.
         num_objects: Number of object slots.
     """
-    def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim,
-                 num_objects, hinge=1., sigma=0.5, encoder='large',
-                 ignore_action=False, copy_action=False, shuffle_objects=False, use_interactions=True, num_layers=3):
+    def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim, num_objects, hinge=1., sigma=0.5,
+                 encoder='large', ignore_action=False, copy_action=False, shuffle_objects=False, use_interactions=True,
+                 edge_actions=False, num_layers=3):
         super(ContrastiveSWM, self).__init__()
         self.shuffle_objects = shuffle_objects
 
@@ -32,6 +32,7 @@ class ContrastiveSWM(nn.Module):
         self.ignore_action = ignore_action
         self.copy_action = copy_action
         self.use_interactions = use_interactions
+        self.edge_actions = edge_actions
         self.num_layers = num_layers
         
         self.pos_loss = 0
@@ -86,6 +87,7 @@ class ContrastiveSWM(nn.Module):
             ignore_action=ignore_action,
             copy_action=copy_action,
             use_interactions=self.use_interactions,
+            edge_actions=self.edge_actions,
             num_layers=self.num_layers,
         )
 
@@ -152,7 +154,7 @@ class ContrastiveSWM(nn.Module):
 class TransitionGNN(torch.nn.Module):
     """GNN-based transition function."""
     def __init__(self, input_dim, hidden_dim, action_dim, num_objects, ignore_action=False, copy_action=False,
-                 act_fn='relu', layer_norm=True, num_layers=3, use_interactions=True, output_dim=None):
+                 act_fn='relu', layer_norm=True, num_layers=3, use_interactions=True, edge_actions=False, output_dim=None):
         super(TransitionGNN, self).__init__()
 
         self.input_dim = input_dim
@@ -165,6 +167,7 @@ class TransitionGNN(torch.nn.Module):
         self.ignore_action = ignore_action
         self.copy_action = copy_action
         self.use_interactions = use_interactions
+        self.edge_actions = edge_actions
         self.num_layers = num_layers
 
         if self.ignore_action:
@@ -173,7 +176,7 @@ class TransitionGNN(torch.nn.Module):
             self.action_dim = action_dim
 
         tmp_action_dim = self.action_dim
-        edge_mlp_input_size = self.input_dim * 2
+        edge_mlp_input_size = self.input_dim * 2 + int(self.edge_actions) * tmp_action_dim
 
         self.edge_mlp = nn.Sequential(*self.make_node_mlp_layers_(
             edge_mlp_input_size, self.hidden_dim, act_fn, layer_norm
@@ -270,6 +273,7 @@ class TransitionGNN(torch.nn.Module):
         # node_attr: Flatten states tensor to [B * num_objects, embedding_dim]
         node_attr = states.reshape(-1, self.input_dim)
 
+        action_vec = None
         if not self.ignore_action:
             action_vec = self.process_action_(action, viz=viz)
 
@@ -282,7 +286,7 @@ class TransitionGNN(torch.nn.Module):
                 batch_size, num_nodes, device)
 
             row, col = edge_index
-            edge_attr = self._edge_model(node_attr[row], node_attr[col])
+            edge_attr = self._edge_model(node_attr[row], node_attr[col], action_vec[row] if self.edge_actions else None)
 
         if not self.ignore_action:
             # Attach action to each state
@@ -711,9 +715,9 @@ class MLP(nn.Module):
 class ContrastiveSWMHA(ContrastiveSWM):
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim, num_objects, hinge=1., sigma=0.5,
                  encoder='large', ignore_action=False, copy_action=False, shuffle_objects=False, use_interactions=True,
-                 num_layers=3, key_query_size=512, value_size=512):
+                 edge_actions=False, num_layers=3, key_query_size=512, value_size=512):
         super().__init__(embedding_dim, input_dims, hidden_dim, action_dim, num_objects, hinge, sigma, encoder,
-                         ignore_action, copy_action, shuffle_objects, use_interactions, num_layers)
+                         ignore_action, copy_action, shuffle_objects, use_interactions, edge_actions, num_layers)
 
         self.attention = AttentionV1(
             state_size=self.embedding_dim,
@@ -780,9 +784,9 @@ class ContrastiveSWMHA(ContrastiveSWM):
 class ContrastiveSWMSA(ContrastiveSWM):
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim, num_objects, hinge=1., sigma=0.5,
                  encoder='large', ignore_action=False, copy_action=False, shuffle_objects=False, use_interactions=True,
-                 num_layers=3, key_query_size=512, value_size=512):
+                 edge_actions=False, num_layers=3, key_query_size=512, value_size=512):
         super().__init__(embedding_dim, input_dims, hidden_dim, action_dim, num_objects, hinge, sigma, encoder,
-                         ignore_action, copy_action, shuffle_objects, use_interactions, num_layers)
+                         ignore_action, copy_action, shuffle_objects, use_interactions, edge_actions, num_layers)
 
         self.attention = AttentionV1(
             state_size=self.embedding_dim,
@@ -802,6 +806,7 @@ class ContrastiveSWMSA(ContrastiveSWM):
             ignore_action=ignore_action,
             copy_action=copy_action,
             use_interactions=self.use_interactions,
+            edge_actions=self.edge_actions,
             num_layers=self.num_layers,
         )
 
