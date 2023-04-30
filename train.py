@@ -1,6 +1,7 @@
 import argparse
 import collections
 import time
+import warnings
 
 import torch
 
@@ -201,6 +202,11 @@ if args.pretrained_cswm_path is not None:
         'use_interactions': pretrained_cswm_args.use_interactions == 'True',
         'edge_actions': pretrained_cswm_args.edge_actions,
     }
+
+    if hasattr(pretrained_cswm_args, 'edge_actions'):
+        cswm_model_args['edge_actions'] = pretrained_cswm_args.edge_actions == 'True'
+    else:
+        warnings.warn(f'"edge_actions" parameter is not defined in {args.pretrained_cswm_path}')
 
     if pretrained_cswm_args.attention == 'hard':
         cswm_model_args['key_query_size'] = pretrained_cswm_args.key_query_size

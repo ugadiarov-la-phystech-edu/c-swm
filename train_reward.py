@@ -161,8 +161,12 @@ def main():
         'encoder': cswm_args.encoder,
         'shuffle_objects': cswm_args.shuffle_objects,
         'use_interactions': cswm_args.use_interactions == 'True',
-        'edge_actions': cswm_args.edge_actions == 'True',
     }
+
+    if hasattr(cswm_args, 'edge_actions'):
+        cswm_model_args['edge_actions'] = cswm_args.edge_actions == 'True'
+    else:
+        warnings.warn(f'"edge_actions" parameter is not defined in {cswm_meta_file}')
 
     if args.edge_actions == 'True':
         assert cswm_args.attention in ('ground_truth', 'none'), f'Unsupported attention type={cswm_args.attention} for edge_actions={args.edge_actions}.'
