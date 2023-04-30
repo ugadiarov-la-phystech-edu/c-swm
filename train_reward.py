@@ -73,6 +73,7 @@ def main():
                         default='checkpoints',
                         help='Path to checkpoints.')
     parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
+    parser.add_argument('--edge_actions', type=str, choices=['True', 'False'], default='False')
     parser.add_argument('--project', type=str, required=True)
     parser.add_argument('--run_id', type=str, default='run-0')
     parser.add_argument('--pretrained_cswm_path', type=str, required=True)
@@ -142,6 +143,7 @@ def main():
         ignore_action=args.ignore_action,
         copy_action=args.copy_action,
         use_interactions=args.use_interactions == 'True',
+        edge_actions=args.edge_actions == 'True',
         output_dim=1,
     ).to(device)
     model.apply(utils.weights_init)
@@ -159,7 +161,11 @@ def main():
         'encoder': cswm_args.encoder,
         'shuffle_objects': cswm_args.shuffle_objects,
         'use_interactions': cswm_args.use_interactions == 'True',
+        'edge_actions': cswm_args.edge_actions == 'True',
     }
+
+    if args.edge_actions == 'True':
+        assert cswm_args.attention in ('ground_truth', 'none'), f'Unsupported attention type={cswm_args.attention} for edge_actions={args.edge_actions}.'
 
     action_converter = None
     if cswm_args.attention == 'hard':
