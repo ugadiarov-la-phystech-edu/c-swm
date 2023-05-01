@@ -685,6 +685,44 @@ register(
 )
 
 register(
+    'ShapesChannelWiseTernaryInteractionsBoxes8Width12EmbodiedAgentOneStaticGoalTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=150,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 8,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 12,
+        'render_scale': 10,
+        'max_episode_steps': 150,
+        'channel_wise': True,
+        'ternary_interactions': True,
+        'embodied_agent': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseTernaryInteractionsBoxes8Width12EmbodiedAgentOneStaticGoalEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=150,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 8,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 12,
+        'render_scale': 10,
+        'max_episode_steps': 150,
+        'channel_wise': True,
+        'ternary_interactions': True,
+        'embodied_agent': True,
+    },
+)
+
+register(
     'ShapesTwoObjectsTrain-v0',
     entry_point='envs.block_pushing:BlockPushing',
     max_episode_steps=100,
