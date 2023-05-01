@@ -328,7 +328,7 @@ for epoch in range(1, args.epochs + 1):
                         epoch_metrics['attention_loss'] += attention_loss.item() * obs.size()[0]
                         loss += attention_loss
                     else:
-                        attention_loss = logit.sum(dim=(1, 2)).mean()
+                        attention_loss = torch.sigmoid(logit).sum(dim=(1, 2)).mean()
                         epoch_metrics['attention_loss'] += attention_loss.item() * obs.size()[0]
                         loss += args.attention_loss_coef * attention_loss
 
