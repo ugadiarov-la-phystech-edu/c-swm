@@ -81,6 +81,7 @@ parser.add_argument('--value_size', type=int, default=512)
 parser.add_argument('--pretrained_cswm_path', type=str)
 parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
+parser.add_argument('--attention_loss_coef', type=float, default=0.1)
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -321,10 +322,15 @@ for epoch in range(1, args.epochs + 1):
                     embedding = model.obj_encoder(model.obj_extractor(obs))
                     logit = attention([embedding, orig_action, False])[0]
                     if args.use_gt_attention == 'True':
-                        loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                        attention_loss = torch.nn.functional.binary_cross_entropy_with_logits(
                             logit.squeeze(dim=2), moving_boxes.to(torch.float32)
                         )
-                        epoch_metrics['attention_loss'] += loss.item() * obs.size()[0]
+                        epoch_metrics['attention_loss'] += attention_loss.item() * obs.size()[0]
+                        loss += attention_loss
+                    else:
+                        attention_loss = logit.sum(dim=(1, 2)).mean()
+                        epoch_metrics['attention_loss'] += attention_loss.item() * obs.size()[0]
+                        loss += args.attention_loss_coef * attention_loss
 
                     action = action * torch.sigmoid(logit)
 
