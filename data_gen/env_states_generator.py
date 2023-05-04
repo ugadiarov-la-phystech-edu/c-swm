@@ -113,6 +113,94 @@ if __name__ == '__main__':
         replay_buffer[episode][Push.MOVING_BOXES_KEY].append(info[Push.MOVING_BOXES_KEY])
         add_observation(use_rle, replay_buffer[episode], ob[1], next_obs=True)
 
+    episode = 2
+    replay_buffer.append(collections.defaultdict(list))
+    for i in range(num_states):
+        vector = states_generator.agent_goal()
+        ob = env.unwrapped._get_observation()
+        image_shape = ob[1].shape
+        add_observation(use_rle, replay_buffer[episode], ob[1])
+
+        action = env.direction2action[vector]
+        if i % 2 == 0:
+            while True:
+                agent_action = agent.act(ob, None, None)
+                if action != agent_action:
+                    action = agent_action
+                    break
+        ob, reward, done, info = env.step(action)
+
+        replay_buffer[episode]['action'].append(action)
+        replay_buffer[episode]['reward'].append(reward)
+        replay_buffer[episode][Push.MOVING_BOXES_KEY].append(info[Push.MOVING_BOXES_KEY])
+        add_observation(use_rle, replay_buffer[episode], ob[1], next_obs=True)
+
+    episode = 3
+    replay_buffer.append(collections.defaultdict(list))
+    for i in range(num_states):
+        vector = states_generator.agent_border()
+        ob = env.unwrapped._get_observation()
+        image_shape = ob[1].shape
+        add_observation(use_rle, replay_buffer[episode], ob[1])
+
+        action = env.direction2action[vector]
+        if i % 2 == 0:
+            while True:
+                agent_action = agent.act(ob, None, None)
+                if action != agent_action:
+                    action = agent_action
+                    break
+        ob, reward, done, info = env.step(action)
+
+        replay_buffer[episode]['action'].append(action)
+        replay_buffer[episode]['reward'].append(reward)
+        replay_buffer[episode][Push.MOVING_BOXES_KEY].append(info[Push.MOVING_BOXES_KEY])
+        add_observation(use_rle, replay_buffer[episode], ob[1], next_obs=True)
+
+    episode = 4
+    replay_buffer.append(collections.defaultdict(list))
+    for i in range(num_states):
+        vector = states_generator.agent_box_border()
+        ob = env.unwrapped._get_observation()
+        image_shape = ob[1].shape
+        add_observation(use_rle, replay_buffer[episode], ob[1])
+
+        action = env.direction2action[vector]
+        if i % 2 == 0:
+            while True:
+                agent_action = agent.act(ob, None, None)
+                if action != agent_action:
+                    action = agent_action
+                    break
+        ob, reward, done, info = env.step(action)
+
+        replay_buffer[episode]['action'].append(action)
+        replay_buffer[episode]['reward'].append(reward)
+        replay_buffer[episode][Push.MOVING_BOXES_KEY].append(info[Push.MOVING_BOXES_KEY])
+        add_observation(use_rle, replay_buffer[episode], ob[1], next_obs=True)
+
+    episode = 5
+    replay_buffer.append(collections.defaultdict(list))
+    for i in range(num_states):
+        vector = states_generator.agent_box_box_stack()
+        ob = env.unwrapped._get_observation()
+        image_shape = ob[1].shape
+        add_observation(use_rle, replay_buffer[episode], ob[1])
+
+        action = env.direction2action[vector]
+        if i % 2 == 0:
+            while True:
+                agent_action = agent.act(ob, None, None)
+                if action != agent_action:
+                    action = agent_action
+                    break
+        ob, reward, done, info = env.step(action)
+
+        replay_buffer[episode]['action'].append(action)
+        replay_buffer[episode]['reward'].append(reward)
+        replay_buffer[episode][Push.MOVING_BOXES_KEY].append(info[Push.MOVING_BOXES_KEY])
+        add_observation(use_rle, replay_buffer[episode], ob[1], next_obs=True)
+
     env.close()
 
     # Save replay buffer to disk.
