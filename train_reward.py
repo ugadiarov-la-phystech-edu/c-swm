@@ -161,6 +161,7 @@ def main():
         'encoder': cswm_args.encoder,
         'shuffle_objects': cswm_args.shuffle_objects,
         'use_interactions': cswm_args.use_interactions == 'True',
+        'neg_loss_coef': cswm_args.neg_loss_coef,
     }
 
     if hasattr(cswm_args, 'edge_actions'):
