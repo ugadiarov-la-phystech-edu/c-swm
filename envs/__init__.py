@@ -685,6 +685,158 @@ register(
 )
 
 register(
+    'ShapesChannelWiseTernaryInteractionsBoxes6Width8EmbodiedAgentOneStaticGoalTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 6,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 8,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'ternary_interactions': True,
+        'embodied_agent': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseTernaryInteractionsBoxes6Width8EmbodiedAgentOneStaticGoalEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 6,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 8,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'ternary_interactions': True,
+        'embodied_agent': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseTernaryInteractionsBoxes6Width9EmbodiedAgentOneStaticGoalTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 6,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 9,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'ternary_interactions': True,
+        'embodied_agent': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseTernaryInteractionsBoxes6Width9EmbodiedAgentOneStaticGoalEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 6,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 9,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'ternary_interactions': True,
+        'embodied_agent': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseTernaryInteractionsBoxes7Width9EmbodiedAgentOneStaticGoalTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 7,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 9,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'ternary_interactions': True,
+        'embodied_agent': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseTernaryInteractionsBoxes7Width9EmbodiedAgentOneStaticGoalEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 7,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 9,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'ternary_interactions': True,
+        'embodied_agent': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseTernaryInteractionsBoxes7Width10EmbodiedAgentOneStaticGoalTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 7,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 10,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'ternary_interactions': True,
+        'embodied_agent': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseTernaryInteractionsBoxes7Width10EmbodiedAgentOneStaticGoalEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 7,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 10,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'ternary_interactions': True,
+        'embodied_agent': True,
+    },
+)
+
+register(
     'ShapesChannelWiseTernaryInteractionsBoxes8Width12EmbodiedAgentOneStaticGoalTrain-v0',
     entry_point='envs.push:Push',
     max_episode_steps=150,
