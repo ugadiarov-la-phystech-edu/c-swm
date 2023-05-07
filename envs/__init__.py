@@ -875,6 +875,82 @@ register(
 )
 
 register(
+    'ShapesChannelWiseTernaryInteractionsBoxes5Width8EmbodiedAgentOneStaticGoalTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 8,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'ternary_interactions': True,
+        'embodied_agent': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseTernaryInteractionsBoxes5Width8EmbodiedAgentOneStaticGoalEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 8,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'ternary_interactions': True,
+        'embodied_agent': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseTernaryInteractionsBoxes6Width7EmbodiedAgentOneStaticGoalTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 6,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 7,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'ternary_interactions': True,
+        'embodied_agent': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseTernaryInteractionsBoxes6Width7EmbodiedAgentOneStaticGoalEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 6,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 7,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'ternary_interactions': True,
+        'embodied_agent': True,
+    },
+)
+
+register(
     'ShapesTwoObjectsTrain-v0',
     entry_point='envs.block_pushing:BlockPushing',
     max_episode_steps=100,
