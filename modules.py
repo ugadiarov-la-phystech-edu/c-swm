@@ -601,6 +601,32 @@ class DecoderCNNLarge(nn.Module):
         return self.deconv4(h)
 
 
+class DecoderMLPChannelWise(nn.Module):
+    """CNN decoder, maps latent state to image."""
+
+    def __init__(self, input_dim, hidden_dim, output_size, act_fn='relu'):
+        super(DecoderMLPChannelWise, self).__init__()
+
+        width, height = output_size[0], output_size[1]
+
+        output_dim = width * height
+
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc3 = nn.Linear(hidden_dim, output_dim)
+        self.ln = nn.LayerNorm(hidden_dim)
+
+        self.act1 = utils.get_act_fn(act_fn)
+        self.act2 = utils.get_act_fn(act_fn)
+
+    def forward(self, ins):
+        h = self.act1(self.fc1(ins))
+        h = self.act2(self.ln(self.fc2(h)))
+        h = self.fc3(h)
+
+        return h
+
+
 class AttentionV1(nn.Module):
     HIDDEN_SIZE = 512
 

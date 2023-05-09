@@ -74,6 +74,8 @@ parser.add_argument('--num_layers', type=int, default=3)
 parser.add_argument('--key_query_size', type=int, default=512)
 parser.add_argument('--value_size', type=int, default=512)
 parser.add_argument('--pretrained_cswm_path', type=str)
+parser.add_argument('--reconstruction', type=str, choices=['True', 'False'], default='False')
+parser.add_argument('--reconstruction_loss_coef', type=float, default=1)
 parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
 parser.add_argument('--use_gt_attention', type=str, choices=['True', 'False'])
@@ -101,6 +103,7 @@ if not os.path.exists(save_folder):
     os.makedirs(save_folder)
 meta_file = os.path.join(save_folder, 'metadata.pkl')
 model_file = os.path.join(save_folder, 'model.pt')
+decoder_file = os.path.join(save_folder, 'decoder.pt')
 log_file = os.path.join(save_folder, 'log.txt')
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -152,6 +155,14 @@ model = model.to(device)
 
 model.apply(utils.weights_init)
 
+decoder = None
+if args.reconstruction == 'True':
+    decoder = modules.DecoderMLPChannelWise(
+        input_dim=args.embedding_dim, hidden_dim=args.hidden_dim, output_size=input_shape[1:]
+    )
+    decoder.to(device)
+    decoder.apply(utils.weights_init)
+
 if args.pretrained_cswm_path is not None:
     pretrained_cswm_meta_file = os.path.join(args.pretrained_cswm_path, 'metadata.pkl')
     pretrained_cswm_model_file = os.path.join(args.pretrained_cswm_path, 'model.pt')
@@ -190,9 +201,10 @@ if args.pretrained_cswm_path is not None:
     model.obj_extractor = cswm.obj_extractor
     del cswm
 
-optimizer = torch.optim.Adam(
-    model.parameters(),
-    lr=args.learning_rate)
+parameters = list(model.parameters())
+if decoder is not None:
+    parameters += list(decoder.parameters())
+optimizer = torch.optim.Adam(parameters, lr=args.learning_rate)
 
 if args.decoder:
     if args.encoder == 'large':
@@ -266,13 +278,31 @@ for epoch in range(1, args.epochs + 1):
             next_loss = F.binary_cross_entropy(next_rec, next_obs, reduction='sum') / obs.size(0)
             loss += next_loss
         else:
+            loss = 0
             if args.use_gt_attention == 'True':
                 action = utils.to_one_hot(action, args.action_dim).repeat(1, args.num_objects).view(-1,
                                                                                                     args.num_objects,
                                                                                                     args.action_dim)
                 action[moving_boxes == 0] = torch.zeros_like(action[0][0])
 
-            loss, metrics = model.contrastive_loss(obs, action, next_obs)
+            if args.reconstruction == 'True':
+                state, next_state = model.extract_objects_(obs, next_obs)
+                transition_loss = model.transition_loss(state, action, next_state)
+                reconstructed_obs = decoder(state).view_as(obs)
+                reconstruction_loss = torch.nn.functional.binary_cross_entropy_with_logits(reconstructed_obs, obs)
+
+                terminal_obs = data_batch[0][is_terminal]
+                if terminal_obs.size()[0] > 0:
+                    terminal_obs /= args.pixel_scale
+                    terminal_state = model.obj_encoder(model.obj_extractor(terminal_obs))
+                    terminal_reconstructed_obs = decoder(terminal_state).view_as(terminal_obs)
+                    reconstruction_loss += \
+                        torch.nn.functional.binary_cross_entropy_with_logits(terminal_reconstructed_obs, terminal_obs)
+                loss += transition_loss + args.reconstruction_loss_coef * reconstruction_loss
+                metrics = {'transition_loss': transition_loss.item(), 'reconstruction_loss': reconstruction_loss.item()}
+            else:
+                loss_contrastive, metrics = model.contrastive_loss(obs, action, next_obs)
+                loss += loss_contrastive
             for key, value in metrics.items():
                 epoch_metrics[key] += value * obs.size(0)
 
@@ -307,3 +337,5 @@ for epoch in range(1, args.epochs + 1):
     if avg_loss < best_loss:
         best_loss = avg_loss
         torch.save(model.state_dict(), model_file)
+        if decoder is not None:
+            torch.save(decoder.state_dict(), decoder_file)
