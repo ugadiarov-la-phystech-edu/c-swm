@@ -225,7 +225,7 @@ def main():
                 rewards = rewards.squeeze().to(torch.float32)
                 if args.object_wise == 'True':
                     attended_action = action_converter.convert(embedding, action)[:, :, :model.action_dim]
-                    target_object_id = action_converter.target_object_id(embedding, action).detach()
+                    target_object_id = action_converter.target_object_id(embedding, action)[0].detach()
                     reward_object_wise = torch.zeros(rewards.size()[0], cswm_args.num_objects, dtype=torch.float32,
                                                      device=device)
                     reward_object_wise[torch.arange(0, rewards.size()[0], device=device), target_object_id] = rewards
