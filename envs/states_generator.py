@@ -43,7 +43,9 @@ class StatesGenerator:
             x = position[0] + shift[0]
             y = position[1] + shift[1]
             if self.env._is_in_grid((x, y), box_id) and self.env.state[x, y] == -1:
-                return x, y
+                return x, y, tuple(-coordinate for coordinate in shift)
+
+        assert False, 'Cannot be here!'
 
     def sample_position_around(self, position, box_id, distance):
         side = 2 * distance + 1
@@ -57,6 +59,50 @@ class StatesGenerator:
             y += position[1] - distance
             if self.env._is_in_grid((x, y), box_id) and self.env.state[x, y] == -1:
                 return x, y
+
+    def sample_positions_along_perimeter(self, width):
+        loc = self.np_random.choice(4 * (width - 1))
+        side = loc // (width - 1)
+        shift = loc % (width - 1)
+        if side == 0:
+            x = 0
+            y = shift
+        elif side == 1:
+            x = shift
+            y = width - 1
+        elif side == 2:
+            x = width - 1
+            y = width - 1 - shift
+        elif side == 3:
+            x = width - 1 - shift
+            y = 0
+        else:
+            assert False, f'Cannot be here!'
+
+        vectors = []
+        if x == 0:
+            vectors.append((-1, 0))
+        if y == width - 1:
+            vectors.append((0, 1))
+        if x == width - 1:
+            vectors.append((1, 0))
+        if y == 0:
+            vectors.append((0, -1))
+
+        idx = self.np_random.choice(a=len(vectors))
+        return x, y, vectors[idx]
+
+    def sample_position_border(self):
+        while True:
+            x, y, vector = self.sample_positions_along_perimeter(self.env.w)
+            if self.env.state[x, y] == -1:
+                return x, y, vector
+
+    def sample_position_next_to_border(self):
+        while True:
+            x, y, vector = self.sample_positions_along_perimeter(self.env.w - 2)
+            if self.env.state[x + 1, y + 1] == -1:
+                return x + 1, y + 1, vector
 
     def agent_box_goal(self):
         self.env._clear_state()
@@ -114,6 +160,122 @@ class StatesGenerator:
         self.env.steps_taken = 0
         self.env.n_boxes_in_game = remaining_box_ids.shape[0] + 2
 
+    def agent_goal(self):
+        self.env._clear_state()
+
+        goal_id = next(iter(self.env.goal_ids))
+        goal_x, goal_y = self.sample_position(goal_id)
+        self.env._set_position(goal_id, goal_x, goal_y)
+
+        agent_id = 0
+        agent_x, agent_y, vector = self.sample_position_straight((goal_x, goal_y), agent_id, distance=1)
+        self.env._set_position(agent_id, agent_x, agent_y)
+
+        remaining_box_ids = list(set(range(self.env.n_boxes)) - {goal_id, agent_id})
+        remaining_box_ids = self.np_random.choice(
+            remaining_box_ids, size=self.np_random.randint(low=1, high=len(remaining_box_ids) + 1), replace=False
+        )
+        for another_box_id in remaining_box_ids:
+            another_box_x, another_box_y = self.sample_position(another_box_id)
+            self.env._set_position(another_box_id, another_box_x, another_box_y)
+
+        self.env.steps_taken = 0
+        self.env.n_boxes_in_game = remaining_box_ids.shape[0]
+
+        return vector
+
+    def agent_border(self):
+        self.env._clear_state()
+
+        agent_id = 0
+        agent_x, agent_y, vector = self.sample_position_border()
+        self.env._set_position(agent_id, agent_x, agent_y)
+
+        goal_id = next(iter(self.env.goal_ids))
+        goal_x, goal_y = self.sample_position(goal_id)
+        self.env._set_position(goal_id, goal_x, goal_y)
+
+        remaining_box_ids = list(set(range(self.env.n_boxes)) - {goal_id, agent_id})
+        remaining_box_ids = self.np_random.choice(
+            remaining_box_ids, size=self.np_random.randint(low=1, high=len(remaining_box_ids) + 1), replace=False
+        )
+        for another_box_id in remaining_box_ids:
+            another_box_x, another_box_y = self.sample_position(another_box_id)
+            self.env._set_position(another_box_id, another_box_x, another_box_y)
+
+        self.env.steps_taken = 0
+        self.env.n_boxes_in_game = remaining_box_ids.shape[0]
+        return vector
+
+    def agent_box_border(self):
+        self.env._clear_state()
+
+        agent_id = 0
+        goal_id = next(iter(self.env.goal_ids))
+        box_ids = list(set(range(self.env.n_boxes)) - {goal_id, agent_id})
+        box_id = self.np_random.choice(box_ids)
+
+        box_x, box_y, vector = self.sample_position_next_to_border()
+        self.env._set_position(box_id, box_x, box_y)
+        assert 1 <= box_x <= self.env.w - 1, f'{box_x}'
+        assert 1 <= box_y <= self.env.w - 1, f'{box_y}'
+
+        agent_x, agent_y = box_x - vector[0], box_y - vector[1]
+        self.env._set_position(agent_id, agent_x, agent_y)
+        assert 1 <= agent_x <= self.env.w - 1, f'{agent_x}'
+        assert 1 <= agent_y <= self.env.w - 1, f'{agent_y}'
+
+        goal_x, goal_y = self.sample_position(goal_id)
+        self.env._set_position(goal_id, goal_x, goal_y)
+
+        remaining_box_ids = list(set(range(self.env.n_boxes)) - {goal_id, agent_id, box_id})
+        remaining_box_ids = self.np_random.choice(
+            remaining_box_ids, size=self.np_random.randint(low=0, high=len(remaining_box_ids) + 1), replace=False
+        )
+        for another_box_id in remaining_box_ids:
+            another_box_x, another_box_y = self.sample_position(another_box_id)
+            self.env._set_position(another_box_id, another_box_x, another_box_y)
+
+        self.env.steps_taken = 0
+        self.env.n_boxes_in_game = remaining_box_ids.shape[0] + 1
+        return vector
+
+    def agent_box_box_stack(self):
+        self.env._clear_state()
+
+        agent_id = 0
+        goal_id = next(iter(self.env.goal_ids))
+        box_ids = list(set(range(self.env.n_boxes)) - {goal_id, agent_id})
+
+        box1_id, box2_id = self.np_random.choice(box_ids, size=2, replace=False)
+
+        box1_x, box1_y = self.sample_position(box1_id)
+        self.env._set_position(box1_id, box1_x, box1_y)
+
+        box2_x, box2_y, vector = self.sample_position_straight((box1_x, box1_y), box2_id, distance=1)
+        self.env._set_position(box2_id, box2_x, box2_y)
+
+        agent_x, agent_y = box2_x - vector[0], box2_y - vector[1]
+        assert 0 <= agent_x < self.env.w, f'{agent_x}'
+        assert 0 <= agent_y < self.env.w, f'{agent_y}'
+        self.env._set_position(agent_id, agent_x, agent_y)
+
+        goal_x, goal_y = self.sample_position(goal_id)
+        self.env._set_position(goal_id, goal_x, goal_y)
+
+        remaining_box_ids = list(set(range(self.env.n_boxes)) - {goal_id, agent_id, box1_id, box2_id})
+        remaining_box_ids = self.np_random.choice(
+            remaining_box_ids, size=self.np_random.randint(low=0, high=len(remaining_box_ids) + 1), replace=False
+        )
+        for another_box_id in remaining_box_ids:
+            another_box_x, another_box_y = self.sample_position(another_box_id)
+            self.env._set_position(another_box_id, another_box_x, another_box_y)
+
+        self.env.steps_taken = 0
+        self.env.n_boxes_in_game = remaining_box_ids.shape[0] + 2
+
+        return vector
+
     def agent_box_around_goal(self):
         self.env._clear_state()
         goal_id = next(iter(self.env.goal_ids))
@@ -124,7 +286,7 @@ class StatesGenerator:
         agent_x, agent_y = self.sample_position_around((goal_x, goal_y), agent_id, distance=1)
         self.env._set_position(agent_id, agent_x, agent_y)
 
-        box_around_id = self.np_random.choice([1, 2, 3], size=1, replace=False)[0]
+        box_around_id = self.np_random.choice([1, 2, 3])
         box_around_x, box_around_y = self.sample_position_around((goal_x, goal_y), box_around_id, distance=1)
         self.env._set_position(box_around_id, box_around_x, box_around_y)
 
@@ -141,13 +303,13 @@ class StatesGenerator:
         goal_x, goal_y = self.sample_position(goal_id)
         self.env._set_position(goal_id, goal_x, goal_y)
 
-        close_box_id = self.np_random.choice([1, 2, 3], size=1, replace=False)[0]
+        close_box_id = self.np_random.choice([1, 2, 3])
         close_box_x, close_box_y = self.sample_position_around((goal_x, goal_y), close_box_id, distance=1)
         self.env._set_position(close_box_id, close_box_x, close_box_y)
 
         agent_id = 0
         while True:
-            agent_x, agent_y = self.sample_position_straight((close_box_x, close_box_y), agent_id, distance=1)
+            agent_x, agent_y, vector = self.sample_position_straight((close_box_x, close_box_y), agent_id, distance=1)
             if StatesGenerator.is_around((agent_x, agent_y), (goal_x, goal_y), distance=1):
                 break
 
@@ -174,8 +336,9 @@ if __name__ == '__main__':
     seed = 17
     env = gym.make('ShapesChannelWiseTernaryInteractionsBoxes5Width7EmbodiedAgentOneStaticGoalTrain-v0')
     env.seed(seed)
+    env.reset()
     generator = StatesGenerator(seed, env.unwrapped)
-    generator.agent_box_box()
+    vector = generator.agent_box_box_stack()
     # counter = collections.Counter()
     # for _ in range(1000):
     #     generator.agent_box_goal()
@@ -186,3 +349,11 @@ if __name__ == '__main__':
     image = np.repeat(env.unwrapped._get_observation()[1].sum(axis=0)[:, :, np.newaxis], repeats=3, axis=2)
     plt.imshow(image)
     plt.show()
+
+    action = env.direction2action[vector]
+    o, r, d, i = env.step(action)
+    print(f'reward={r} done={d} info={i}')
+    image = np.repeat(o[1].sum(axis=0)[:, :, np.newaxis], repeats=3, axis=2)
+    plt.imshow(image)
+    plt.show()
+

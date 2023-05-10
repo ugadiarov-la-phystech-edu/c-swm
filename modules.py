@@ -19,7 +19,7 @@ class ContrastiveSWM(nn.Module):
     """
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim, num_objects, hinge=1., sigma=0.5,
                  encoder='large', ignore_action=False, copy_action=False, shuffle_objects=False, use_interactions=True,
-                 edge_actions=False, num_layers=3):
+                 edge_actions=False, neg_loss_coef=1., num_layers=3):
         super(ContrastiveSWM, self).__init__()
         self.shuffle_objects = shuffle_objects
 
@@ -33,6 +33,7 @@ class ContrastiveSWM(nn.Module):
         self.copy_action = copy_action
         self.use_interactions = use_interactions
         self.edge_actions = edge_actions
+        self.neg_loss_coef = neg_loss_coef
         self.num_layers = num_layers
         
         self.pos_loss = 0
@@ -118,7 +119,7 @@ class ContrastiveSWM(nn.Module):
         # Sample negative state across episodes at random
         neg_obs, neg_state = self.create_negatives_(obs, state)
 
-        self.neg_loss = self.negative_loss_(state, neg_state)
+        self.neg_loss = self.neg_loss_coef * self.negative_loss_(state, neg_state)
 
         loss = self.pos_loss + self.neg_loss
 

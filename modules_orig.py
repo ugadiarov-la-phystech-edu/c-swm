@@ -18,7 +18,7 @@ class ContrastiveSWM(nn.Module):
     """
 
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim,
-                 num_objects, hinge=1., sigma=0.5, encoder='large',
+                 num_objects, hinge=1., sigma=0.5, encoder='large', neg_loss_coef=1.,
                  ignore_action=False, copy_action=False, shuffle_objects=False, use_interactions=True):
         super(ContrastiveSWM, self).__init__()
         self.shuffle_objects = shuffle_objects
@@ -32,6 +32,7 @@ class ContrastiveSWM(nn.Module):
         self.ignore_action = ignore_action
         self.copy_action = copy_action
         self.use_interactions = use_interactions
+        self.neg_loss_coef = neg_loss_coef
 
         self.pos_loss = 0
         self.neg_loss = 0
@@ -123,7 +124,7 @@ class ContrastiveSWM(nn.Module):
         zeros = torch.zeros_like(self.pos_loss)
 
         self.pos_loss = self.pos_loss.mean()
-        self.neg_loss = torch.max(
+        self.neg_loss = self.neg_loss_coef * torch.max(
             zeros, self.hinge - self.energy(
                 state, action, neg_state, no_trans=True)).mean()
 

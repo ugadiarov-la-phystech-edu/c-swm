@@ -1,6 +1,7 @@
 import argparse
 import collections
 import time
+import warnings
 
 import torch
 
@@ -74,6 +75,7 @@ parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
 parser.add_argument('--edge_actions', type=str, choices=['True', 'False'], default='False')
 parser.add_argument('--attention', type=str, choices=['hard', 'soft', 'ground_truth', 'none', 'gnn'], required=True)
 parser.add_argument('--use_gt_attention', type=str, choices=['True', 'False'], default='False')
+parser.add_argument('--neg_loss_coef', type=float, default=1)
 parser.add_argument('--num_layers', type=int, default=3)
 parser.add_argument('--key_query_size', type=int, default=512)
 parser.add_argument('--value_size', type=int, default=512)
@@ -143,6 +145,7 @@ model_args = {
     'shuffle_objects': args.shuffle_objects,
     'use_interactions': args.use_interactions == 'True',
     'edge_actions': args.edge_actions == 'True',
+    'neg_loss_coef': args.neg_loss_coef,
 }
 
 attention = None
@@ -201,6 +204,11 @@ if args.pretrained_cswm_path is not None:
         'use_interactions': pretrained_cswm_args.use_interactions == 'True',
         'edge_actions': pretrained_cswm_args.edge_actions,
     }
+
+    if hasattr(pretrained_cswm_args, 'edge_actions'):
+        cswm_model_args['edge_actions'] = pretrained_cswm_args.edge_actions == 'True'
+    else:
+        warnings.warn(f'"edge_actions" parameter is not defined in {args.pretrained_cswm_path}')
 
     if pretrained_cswm_args.attention == 'hard':
         cswm_model_args['key_query_size'] = pretrained_cswm_args.key_query_size
