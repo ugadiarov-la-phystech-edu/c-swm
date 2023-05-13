@@ -19,7 +19,8 @@ class ContrastiveSWM(nn.Module):
 
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim,
                  num_objects, hinge=1., sigma=0.5, encoder='large', neg_loss_coef=1.,
-                 ignore_action=False, copy_action=False, shuffle_objects=False, use_interactions=True):
+                 ignore_action=False, copy_action=False, shuffle_objects=False, use_interactions=True,
+                 edge_actions=False):
         super(ContrastiveSWM, self).__init__()
         self.shuffle_objects = shuffle_objects
 
@@ -33,6 +34,7 @@ class ContrastiveSWM(nn.Module):
         self.copy_action = copy_action
         self.use_interactions = use_interactions
         self.neg_loss_coef = neg_loss_coef
+        self.edge_actions = edge_actions
 
         self.pos_loss = 0
         self.neg_loss = 0
@@ -85,7 +87,8 @@ class ContrastiveSWM(nn.Module):
             num_objects=num_objects,
             ignore_action=ignore_action,
             copy_action=copy_action,
-            use_interactions=self.use_interactions
+            use_interactions=self.use_interactions,
+            edge_actions=self.edge_actions
         )
 
         self.width = width_height[0]
@@ -140,7 +143,7 @@ class TransitionGNN(torch.nn.Module):
     """GNN-based transition function."""
 
     def __init__(self, input_dim, hidden_dim, action_dim, num_objects,
-                 ignore_action=False, copy_action=False, act_fn='relu', use_interactions=True, output_dim=None):
+                 ignore_action=False, copy_action=False, act_fn='relu', use_interactions=True, edge_actions=False, output_dim=None):
         super(TransitionGNN, self).__init__()
 
         self.input_dim = input_dim
@@ -153,6 +156,7 @@ class TransitionGNN(torch.nn.Module):
         self.ignore_action = ignore_action
         self.copy_action = copy_action
         self.use_interactions = use_interactions
+        self.edge_actions = edge_actions
 
         if self.ignore_action:
             self.action_dim = 0
@@ -160,7 +164,7 @@ class TransitionGNN(torch.nn.Module):
             self.action_dim = action_dim
 
         self.edge_mlp = nn.Sequential(
-            nn.Linear(input_dim * 2, hidden_dim),
+            nn.Linear(input_dim * 2 + int(self.edge_actions) * self.action_dim, hidden_dim),
             utils.get_act_fn(act_fn),
             nn.Linear(hidden_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
@@ -182,9 +186,12 @@ class TransitionGNN(torch.nn.Module):
         self.edge_list = None
         self.batch_size = 0
 
-    def _edge_model(self, source, target, edge_attr):
-        del edge_attr  # Unused.
-        out = torch.cat([source, target], dim=1)
+    def _edge_model(self, source, target, action_vec):
+        argument = [source, target]
+        if action_vec is not None:
+            argument.append(action_vec)
+
+        out = torch.cat(argument, dim=1)
         return self.edge_mlp(out)
 
     def _node_model(self, node_attr, edge_index, edge_attr):
@@ -238,17 +245,7 @@ class TransitionGNN(torch.nn.Module):
         edge_attr = None
         edge_index = None
 
-        if num_nodes > 1:
-            # edge_index: [B * (num_objects*[num_objects-1]), 2] edge list
-            edge_index = self._get_edge_list_fully_connected(
-                batch_size, num_nodes, cuda)
-
-            row, col = edge_index
-            edge_attr = self._edge_model(
-                node_attr[row], node_attr[col], edge_attr)
-
         if not self.ignore_action:
-
             if self.copy_action:
                 action_vec = utils.to_one_hot(
                     action, self.action_dim).repeat(1, self.num_objects)
@@ -258,6 +255,16 @@ class TransitionGNN(torch.nn.Module):
                     action, self.action_dim * num_nodes)
                 action_vec = action_vec.view(-1, self.action_dim)
 
+        if num_nodes > 1:
+            # edge_index: [B * (num_objects*[num_objects-1]), 2] edge list
+            edge_index = self._get_edge_list_fully_connected(
+                batch_size, num_nodes, cuda)
+
+            row, col = edge_index
+            edge_attr = self._edge_model(
+                node_attr[row], node_attr[col], action_vec[row] if self.edge_actions else None)
+
+        if not self.ignore_action:
             # Attach action to each state
             node_attr = torch.cat([node_attr, action_vec], dim=-1)
 

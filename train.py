@@ -179,7 +179,7 @@ elif args.attention == 'gnn':
     ).to(device)
     attention.apply(utils.weights_init)
 else:
-    model = modules.ContrastiveSWM(**model_args)
+    model = modules_orig.ContrastiveSWM(**model_args)
 
 model = model.to(device)
 
