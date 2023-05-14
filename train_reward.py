@@ -80,6 +80,7 @@ def main():
     parser.add_argument('--use_next_state', type=str, choices=['True', 'False'], required=True)
     parser.add_argument('--signal', type=str, choices=['reward', 'return'], required=True)
     parser.add_argument('--gamma', type=float, default=0.99)
+    parser.add_argument('--n_stack', type=int, default=1)
     parser.add_argument('--model_name', type=str, required=True)
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--object_wise', type=str, choices=['True', 'False'], default='True')
@@ -135,7 +136,7 @@ def main():
     if use_next_state:
         reward_model_input_dim = 2 * cswm_args.embedding_dim
 
-    model = modules.TransitionGNN(
+    model = modules.TransitionModel(
         input_dim=reward_model_input_dim,
         hidden_dim=args.hidden_dim,
         action_dim=args.action_dim,
@@ -144,6 +145,7 @@ def main():
         copy_action=args.copy_action,
         use_interactions=args.use_interactions == 'True',
         edge_actions=args.edge_actions == 'True',
+        n_stack=args.n_stack,
         output_dim=1,
     ).to(device)
     model.apply(utils.weights_init)
@@ -168,6 +170,11 @@ def main():
         cswm_model_args['edge_actions'] = cswm_args.edge_actions == 'True'
     else:
         warnings.warn(f'"edge_actions" parameter is not defined in {cswm_meta_file}')
+
+    if hasattr(cswm_args, 'n_stack'):
+        cswm_model_args['n_stack'] = cswm_args.n_stack
+    else:
+        warnings.warn(f'"n_stack" parameter is not defined in {cswm_meta_file}')
 
     if args.edge_actions == 'True':
         assert cswm_args.attention in ('ground_truth', 'none'), f'Unsupported attention type={cswm_args.attention} for edge_actions={args.edge_actions}.'
@@ -299,17 +306,17 @@ def main():
                 embedding = torch.cat([embedding, next_embedding], dim=-1)
 
             if args.signal == 'reward' or torch.count_nonzero(is_terminal).item() == 0:
-                prediction = model([embedding, attended_action, False])[0].squeeze(dim=-1)
+                prediction = model([embedding, attended_action, False])[1].squeeze(dim=-1)
                 if args.object_wise != 'True':
                     prediction = prediction.sum(-1, keepdims=True)
                 loss = functional.mse_loss(prediction, ground_truth)
             else:
                 is_not_terminal = ~is_terminal
                 prediction_not_terminal = model([embedding[is_not_terminal], attended_action[is_not_terminal], False])[
-                    0].squeeze(dim=-1)
+                    1].squeeze(dim=-1)
                 loss_not_terminal = functional.mse_loss(prediction_not_terminal, ground_truth[is_not_terminal],
                                                         reduction='none')
-                prediction_terminal = model([embedding[is_terminal], attended_action[is_terminal], False])[0].squeeze(
+                prediction_terminal = model([embedding[is_terminal], attended_action[is_terminal], False])[1].squeeze(
                     dim=-1)
                 ground_truth_terminal = ground_truth[is_terminal].unsqueeze(-1).expand_as(prediction_terminal)
 

@@ -82,6 +82,7 @@ parser.add_argument('--value_size', type=int, default=512)
 parser.add_argument('--pretrained_cswm_path', type=str)
 parser.add_argument('--reconstruction', type=str, choices=['True', 'False'], default='False')
 parser.add_argument('--reconstruction_loss_coef', type=float, default=1)
+parser.add_argument('--n_stack', type=int, default=1)
 parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
 
@@ -149,6 +150,7 @@ model_args = {
     'use_interactions': args.use_interactions == 'True',
     'edge_actions': args.edge_actions == 'True',
     'neg_loss_coef': args.neg_loss_coef,
+    'n_stack': args.n_stack,
 }
 
 attention = None
@@ -214,6 +216,7 @@ if args.pretrained_cswm_path is not None:
         'shuffle_objects': pretrained_cswm_args.shuffle_objects,
         'use_interactions': pretrained_cswm_args.use_interactions == 'True',
         'edge_actions': pretrained_cswm_args.edge_actions,
+        'n_stack': pretrained_cswm_args.n_stack,
     }
 
     if hasattr(pretrained_cswm_args, 'edge_actions'):
@@ -319,7 +322,8 @@ for epoch in range(1, args.epochs + 1):
             loss = F.binary_cross_entropy(
                 rec, obs, reduction='sum') / obs.size(0)
 
-            next_state_pred = state + model.transition_model(state, action)
+            last_state, pred_trans = model.transition_model(state, action)
+            next_state_pred = last_state + pred_trans
             next_rec = torch.sigmoid(decoder(next_state_pred))
             next_loss = F.binary_cross_entropy(next_rec, next_obs, reduction='sum') / obs.size(0)
             loss += next_loss

@@ -19,7 +19,7 @@ class ContrastiveSWM(nn.Module):
     """
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim, num_objects, hinge=1., sigma=0.5,
                  encoder='large', ignore_action=False, copy_action=False, shuffle_objects=False, use_interactions=True,
-                 edge_actions=False, neg_loss_coef=1., num_layers=3):
+                 edge_actions=False, neg_loss_coef=1., num_layers=3, n_stack=1):
         super(ContrastiveSWM, self).__init__()
         self.shuffle_objects = shuffle_objects
 
@@ -35,6 +35,7 @@ class ContrastiveSWM(nn.Module):
         self.edge_actions = edge_actions
         self.neg_loss_coef = neg_loss_coef
         self.num_layers = num_layers
+        self.n_stack = n_stack
         
         self.pos_loss = 0
         self.neg_loss = 0
@@ -80,7 +81,7 @@ class ContrastiveSWM(nn.Module):
             output_dim=embedding_dim,
             num_objects=num_objects)
 
-        self.transition_model = TransitionGNN(
+        self.transition_model = TransitionModel(
             input_dim=embedding_dim,
             hidden_dim=hidden_dim,
             action_dim=action_dim,
@@ -90,6 +91,7 @@ class ContrastiveSWM(nn.Module):
             use_interactions=self.use_interactions,
             edge_actions=self.edge_actions,
             num_layers=self.num_layers,
+            n_stack=self.n_stack
         )
 
         self.width = width_height[0]
@@ -102,7 +104,7 @@ class ContrastiveSWM(nn.Module):
 
         if no_trans:
             diff = state - next_state
-            return norm * diff.pow(2).mean(2)
+            return norm * diff.pow(2).mean(dim=(1, 2))
         else:
             pred_state = self.forward_transition(state, action)
             diff = pred_state - next_state
@@ -148,8 +150,41 @@ class ContrastiveSWM(nn.Module):
         return self.obj_encoder(self.obj_extractor(obs))
 
     def forward_transition(self, state, action):
-        pred_trans, _, _ = self.transition_model([state, action, False])
-        return state + pred_trans
+        last_state, pred_trans = self.transition_model([state, action, False])
+        return last_state + pred_trans
+
+
+class TransitionModel(torch.nn.Module):
+    def __init__(self, input_dim, hidden_dim, action_dim, num_objects, ignore_action=False, copy_action=False,
+                 num_layers=3, use_interactions=True, edge_actions=False, n_stack=1, output_dim=None):
+        super(TransitionModel, self).__init__()
+        self.n_stack = n_stack
+        self.output_dim = output_dim
+
+        self.transition_gnns = nn.ModuleList()
+        for i in range(self.n_stack):
+            module = TransitionGNN(
+                input_dim=input_dim,
+                hidden_dim=hidden_dim,
+                action_dim=action_dim,
+                num_objects=num_objects,
+                ignore_action=ignore_action,
+                copy_action=copy_action,
+                use_interactions=use_interactions,
+                edge_actions=edge_actions,
+                num_layers=num_layers,
+                output_dim=self.output_dim if i == self.n_stack - 1 else None
+            )
+            self.transition_gnns.append(module)
+
+    def forward(self, x):
+        last_state, action, viz = x
+        pred_trans = 0
+        for gnn in self.transition_gnns:
+            state = last_state + pred_trans
+            pred_trans, pred_action, viz = gnn([state, action, False])
+            last_state = state
+        return last_state, pred_trans
 
 
 class TransitionGNN(torch.nn.Module):
@@ -782,14 +817,14 @@ class ContrastiveSWMHA(ContrastiveSWM):
             for obj_idx in range(self.num_objects):
                 node_idx = torch.zeros(action.size(0), dtype=torch.long, device=action.device) + obj_idx
                 tmp_action = self.action_to_target_node(action, node_idx)
-                pred_trans, _, _ = self.transition_model([state, tmp_action, False])
-                pred_state.append(state + pred_trans)
+                last_state, pred_trans = self.transition_model([state, tmp_action, False])
+                pred_state.append(last_state + pred_trans)
             return torch.stack(pred_state, dim=1), weights
         else:
             node_idx = torch.argmax(weights, dim=1)
             action = self.action_to_target_node(action, node_idx)
-            pred_trans, _, _ = self.transition_model([state, action, False])
-            return state + pred_trans
+            last_state, pred_trans = self.transition_model([state, action, False])
+            return last_state + pred_trans
 
     def forward_weights(self, state, action):
         if len(action.shape) == 1:
@@ -845,8 +880,8 @@ class ContrastiveSWMSA(ContrastiveSWM):
             assert len(action.shape) == 2
         action = self.attention([state, action])
 
-        pred_trans, _, _ = self.transition_model([state, action, False])
-        return state + pred_trans
+        last_state, pred_trans = self.transition_model([state, action, False])
+        return last_state + pred_trans
 
 
 class ActionConverter:
