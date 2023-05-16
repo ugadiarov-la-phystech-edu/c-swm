@@ -108,7 +108,7 @@ class Push(gym.Env):
     def __init__(self, n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, width=5,
                  embodied_agent=False, return_state=True, observation_type='shapes', max_episode_steps=75,
                  border_walls=True, channels_first=True, channel_wise=False, channels_for_static_objects=True,
-                 seed=None, render_scale=10, ternary_interactions=False,
+                 seed=None, render_scale=10, ternary_interactions=False, push_reward=False,
                  ):
         if n_static_boxes > 0:
             assert n_goals == 0 or static_goals, 'Cannot have movable goals with static objects.'
@@ -121,6 +121,7 @@ class Push(gym.Env):
         self.n_boxes = n_boxes
         self.embodied_agent = embodied_agent
         self.ternary_interactions = ternary_interactions
+        self.push_reward = push_reward
 
         self.goal_ids = set()
         self.static_box_ids = set()
@@ -256,7 +257,7 @@ class Push(gym.Env):
             self._set_position(box_id=i, x=x, y=y)
 
         self.steps_taken = 0
-        self.n_boxes_in_game = self.n_boxes - len(self.goal_ids) - int(self.embodied_agent)
+        self.n_boxes_in_game = self.n_boxes - len(self.goal_ids) - int(self.embodied_agent) - int(self.push_reward)
         if not self.embodied_agent:
             self.n_boxes_in_game -= len(self.static_box_ids) * int(self.static_goals)
 
@@ -353,7 +354,7 @@ class Push(gym.Env):
                     else:
                         reward += Push.COLLISION_REWARD
                 elif another_box_type == Push.GOAL:
-                    if self.embodied_agent:
+                    if self.embodied_agent or self.push_reward:
                         reward += Push.COLLISION_REWARD
                     else:
                         reward += Push.HIT_GOAL_REWARD
@@ -534,7 +535,8 @@ if __name__ == "__main__":
     If called without arguments, starts an interactive game played with wasd to move, q to quit.
     """
     env = Push(n_boxes=5, n_static_boxes=0, n_goals=1, static_goals=True, observation_type='shapes', border_walls=True,
-               channels_first=False, width=7, embodied_agent=True, render_scale=10, return_state=False, ternary_interactions=True)
+               channels_first=False, width=5, embodied_agent=False, render_scale=10, return_state=False,
+               ternary_interactions=True, push_reward=True, max_episode_steps=100, seed=1)
 
     if len(sys.argv) > 1:
         if sys.argv[1] == "random":
@@ -559,10 +561,14 @@ if __name__ == "__main__":
             episode_r = 0
             l = 0
             while not done:
+                plt.imshow(s)
+                plt.show()
                 a = agent.act(None, None, None)
                 s, r, done, _ = env.step(a)
                 episode_r += r
                 l += 1
+            plt.imshow(s)
+            plt.show()
             all_r.append(episode_r)
             all_l.append(l)
         print(f'Total reward: {np.mean(all_r)} +/- {np.std(all_r)}, std_mean={np.std(all_r) / np.sqrt(n_episodes)}')
