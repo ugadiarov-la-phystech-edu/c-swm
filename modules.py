@@ -811,9 +811,9 @@ class ContrastiveSWMHA(ContrastiveSWM):
 class ContrastiveSWMSA(ContrastiveSWM):
     def __init__(self, embedding_dim, input_dims, hidden_dim, action_dim, num_objects, hinge=1., sigma=0.5,
                  encoder='large', ignore_action=False, copy_action=False, shuffle_objects=False, use_interactions=True,
-                 edge_actions=False, num_layers=3, key_query_size=512, value_size=512):
+                 edge_actions=False, num_layers=3, key_query_size=512, value_size=512, neg_loss_coef=1.):
         super().__init__(embedding_dim, input_dims, hidden_dim, action_dim, num_objects, hinge, sigma, encoder,
-                         ignore_action, copy_action, shuffle_objects, use_interactions, edge_actions, num_layers)
+                         ignore_action, copy_action, shuffle_objects, use_interactions, edge_actions, neg_loss_coef, num_layers)
 
         self.attention = AttentionV1(
             state_size=self.embedding_dim,
