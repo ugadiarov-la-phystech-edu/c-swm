@@ -293,6 +293,42 @@ register(
 )
 
 register(
+    'ShapesChannelWiseBoxes8Width10OneStaticGoalAsymmetricTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 8,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 10,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'symmetric': False,
+    },
+)
+
+register(
+    'ShapesChannelWiseBoxes8Width10OneStaticGoalAsymmetricEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 8,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'width': 10,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'symmetric': False,
+    },
+)
+
+register(
     'ShapesChannelWiseBoxes5Width7OneStaticGoalTrain-v0',
     entry_point='envs.push:Push',
     max_episode_steps=100,
@@ -1249,6 +1285,44 @@ register(
         'render_scale': 10,
         'max_episode_steps': 100,
         'channel_wise': True,
+    },
+)
+
+register(
+    'ShapesChannelWiseOneStaticGoalAsymmetricTrain-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'static_goals': True,
+        'width': 5,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'symmetric': False,
+    },
+)
+
+register(
+    'ShapesChannelWiseOneStaticGoalAsymmetricEval-v0',
+    entry_point='envs.push:Push',
+    max_episode_steps=100,
+    kwargs={
+        'observation_type': 'shapes',
+        'border_walls': True,
+        'n_boxes': 5,
+        'n_goals': 1,
+        'n_static_boxes': 0,
+        'static_goals': True,
+        'width': 5,
+        'render_scale': 10,
+        'max_episode_steps': 100,
+        'channel_wise': True,
+        'symmetric': False,
     },
 )
 
