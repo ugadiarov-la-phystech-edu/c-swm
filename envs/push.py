@@ -1,3 +1,4 @@
+import math
 import random
 
 import gym
@@ -538,13 +539,16 @@ class AdHocPushAgent:
                            if idx not in self.env.goal_ids and idx not in self.env.static_box_ids and box_pos[0] != -1]
         idx, box_pos = random.choice(box_pos_in_game)
         goal_pos = self.env.box_pos[next(iter(self.env.goal_ids))]
-        delta = goal_pos - box_pos
-        if np.abs(delta)[0] >= np.abs(delta)[1]:
-            direction = (int(delta[0] > 0) * 2 - 1, 0)
-        else:
-            direction = (0, int(delta[1] > 0) * 2 - 1)
+        delta = np.sign(goal_pos - box_pos)
+        current_direction = None
+        current_pace = math.inf
+        for direction, pace in self.env.pace[idx].items():
+            for vec in (delta[0], 0), (0, delta[1]):
+                if direction == vec and pace < current_pace:
+                    current_direction = direction
+                    current_pace = pace
 
-        return idx * 4 + self.env.direction2action[direction]
+        return idx * 4 + self.env.direction2action[current_direction]
 
 
 class RandomPushAgent:
