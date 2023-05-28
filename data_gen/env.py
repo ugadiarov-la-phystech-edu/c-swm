@@ -157,9 +157,11 @@ if __name__ == '__main__':
 
         if i % 10 == 0:
             mean_length = 0
+            success_rate = 0
             if len(lengths) > 0:
                 mean_length = sum(lengths) / len(lengths)
-            print(f"iter {i}, mean episode length: {mean_length}")
+                success_rate = sum(length < 100 for length in lengths) / len(lengths)
+            print(f"iter {i}, mean episode length: {mean_length}, success rate: {success_rate}")
 
     env.close()
 
