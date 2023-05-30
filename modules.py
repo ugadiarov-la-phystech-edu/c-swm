@@ -95,7 +95,7 @@ class ContrastiveSWM(nn.Module):
         self.width = width_height[0]
         self.height = width_height[1]
 
-    def energy(self, state, action, next_state, no_trans=False):
+    def energy(self, state, action, next_state, moved_boxes, no_trans=False):
         """Energy function based on normalized squared L2 norm."""
 
         norm = 0.5 / (self.sigma**2)
@@ -104,17 +104,17 @@ class ContrastiveSWM(nn.Module):
             diff = state - next_state
             return norm * diff.pow(2).mean(2)
         else:
-            pred_state = self.forward_transition(state, action)
+            pred_state = self.forward_transition(state, action, moved_boxes)
             diff = pred_state - next_state
             return norm * diff.pow(2).mean(dim=(1, 2))
 
     def transition_loss(self, state, action, next_state):
         return self.energy(state, action, next_state).mean()
 
-    def contrastive_loss(self, obs, action, next_obs):
+    def contrastive_loss(self, obs, action, next_obs, moved_boxes):
         state, next_state = self.extract_objects_(obs, next_obs)
 
-        self.pos_loss = self.energy(state, action, next_state).mean()
+        self.pos_loss = self.energy(state, action, next_state, moved_boxes).mean()
 
         # Sample negative state across episodes at random
         neg_obs, neg_state = self.create_negatives_(obs, state)
@@ -140,15 +140,15 @@ class ContrastiveSWM(nn.Module):
         return neg_obs, neg_state
 
     def negative_loss_(self, state, neg_state):
-        energy = self.energy(state, None, neg_state, no_trans=True)
+        energy = self.energy(state, None, neg_state, None, no_trans=True)
         zeros = torch.zeros_like(energy)
         return torch.max(zeros, self.hinge - energy).mean()
 
     def forward(self, obs):
         return self.obj_encoder(self.obj_extractor(obs))
 
-    def forward_transition(self, state, action):
-        pred_trans, _, _ = self.transition_model([state, action, False])
+    def forward_transition(self, state, action, moved_boxes):
+        pred_trans, _, _ = self.transition_model([state, action, moved_boxes, False])
         return state + pred_trans
 
 
@@ -264,7 +264,7 @@ class TransitionGNN(torch.nn.Module):
         return action_vec
 
     def forward(self, x):
-        states, action, viz = x
+        states, action, moved_boxes, viz = x
 
         device = states.device
         batch_size = states.size(0)
@@ -285,9 +285,11 @@ class TransitionGNN(torch.nn.Module):
             # edge_index: [B * (num_objects*[num_objects-1]), 2] edge list
             edge_index = self._get_edge_list_fully_connected(
                 batch_size, num_nodes, device)
+            interaction_flag = torch.all(moved_boxes.flatten()[edge_index.T], dim=1, keepdim=True).to(torch.float32)
 
             row, col = edge_index
             edge_attr = self._edge_model(node_attr[row], node_attr[col], action_vec[row] if self.edge_actions else None)
+            edge_attr *= interaction_flag
 
         if not self.ignore_action:
             # Attach action to each state
@@ -755,7 +757,7 @@ class ContrastiveSWMHA(ContrastiveSWM):
             use_sigmoid=False
         )
 
-    def energy(self, state, action, next_state, no_trans=False):
+    def energy(self, state, action, next_state, moved_boxes, no_trans=False):
         """Energy function based on normalized squared L2 norm."""
 
         norm = 0.5 / (self.sigma**2)
@@ -764,13 +766,13 @@ class ContrastiveSWMHA(ContrastiveSWM):
             diff = state - next_state
             return norm * diff.pow(2).mean(2)
         else:
-            pred_state, weights = self.forward_transition(state, action, all=True)
+            pred_state, weights = self.forward_transition(state, action, moved_boxes, all=True)
             diff = pred_state - next_state[:, None]
             diff = diff.pow(2).mean(dim=(2, 3))
             diff = (diff * weights).sum(1)
             return norm * diff
 
-    def forward_transition(self, state, action, all=False):
+    def forward_transition(self, state, action, moved_boxes, all=False):
         if len(action.shape) == 1:
             action = utils.to_one_hot(action, self.action_dim)
         else:
@@ -782,13 +784,13 @@ class ContrastiveSWMHA(ContrastiveSWM):
             for obj_idx in range(self.num_objects):
                 node_idx = torch.zeros(action.size(0), dtype=torch.long, device=action.device) + obj_idx
                 tmp_action = self.action_to_target_node(action, node_idx)
-                pred_trans, _, _ = self.transition_model([state, tmp_action, False])
+                pred_trans, _, _ = self.transition_model([state, tmp_action, moved_boxes, False])
                 pred_state.append(state + pred_trans)
             return torch.stack(pred_state, dim=1), weights
         else:
             node_idx = torch.argmax(weights, dim=1)
             action = self.action_to_target_node(action, node_idx)
-            pred_trans, _, _ = self.transition_model([state, action, False])
+            pred_trans, _, _ = self.transition_model([state, action, moved_boxes, False])
             return state + pred_trans
 
     def forward_weights(self, state, action):
@@ -837,7 +839,7 @@ class ContrastiveSWMSA(ContrastiveSWM):
             num_layers=self.num_layers,
         )
 
-    def forward_transition(self, state, action):
+    def forward_transition(self, state, action, moved_boxes):
 
         if len(action.shape) == 1:
             action = utils.to_one_hot(action, self.action_dim)
@@ -845,7 +847,7 @@ class ContrastiveSWMSA(ContrastiveSWM):
             assert len(action.shape) == 2
         action = self.attention([state, action])
 
-        pred_trans, _, _ = self.transition_model([state, action, False])
+        pred_trans, _, _ = self.transition_model([state, action, moved_boxes, False])
         return state + pred_trans
 
 
@@ -869,14 +871,14 @@ class ActionConverter:
 
         return action
 
-    def actions_weights(self, state, action):
+    def actions_weights(self, state, action, moving_boxes):
         batch_size, num_objects, _ = state.size()
 
         orig_action = action
         action = self.to_one_hot(action)
         if self.attention == 'gnn':
             action = action.repeat(1, num_objects).view(batch_size, num_objects, self.action_dim)
-            weight = torch.sigmoid(self.attention_module([state, orig_action, False])[0])
+            weight = torch.sigmoid(self.attention_module([state, orig_action, moving_boxes, False])[0])
             action = action * weight
             return action, weight.squeeze(dim=2)
 

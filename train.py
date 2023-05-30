@@ -334,7 +334,7 @@ for epoch in range(1, args.epochs + 1):
                     action[moving_boxes == 0] = torch.zeros_like(action[0][0])
                 else:
                     embedding = model.obj_encoder(model.obj_extractor(obs))
-                    logit = attention([embedding, orig_action, False])[0]
+                    logit = attention([embedding, orig_action, moving_boxes, False])[0]
                     if args.use_gt_attention == 'True':
                         loss = torch.nn.functional.binary_cross_entropy_with_logits(
                             logit.squeeze(dim=2), moving_boxes.to(torch.float32)
@@ -359,7 +359,7 @@ for epoch in range(1, args.epochs + 1):
                 loss += transition_loss + args.reconstruction_loss_coef * reconstruction_loss
                 metrics = {'transition_loss': transition_loss.item(), 'reconstruction_loss': reconstruction_loss.item()}
             else:
-                loss_contrastive, metrics = model.contrastive_loss(obs, action, next_obs)
+                loss_contrastive, metrics = model.contrastive_loss(obs, action, next_obs, moving_boxes)
                 loss += loss_contrastive
             for key, value in metrics.items():
                 epoch_metrics[key] += value * obs.size(0)

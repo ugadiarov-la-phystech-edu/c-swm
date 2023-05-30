@@ -267,7 +267,7 @@ def main():
                 rewards = rewards.to(torch.float32).unsqueeze(-1)
 
                 if cswm_args.attention in ('soft', 'hard', 'gnn'):
-                    attended_action, weight = action_converter.actions_weights(embedding, action)
+                    attended_action, weight = action_converter.actions_weights(embedding, action, moving_boxes)
                     if cswm_args.attention == 'hard':
                         attended_action = attended_action[:, :, :model.action_dim]
                         index_max = torch.argmax(weight, dim=1)
@@ -299,17 +299,17 @@ def main():
                 embedding = torch.cat([embedding, next_embedding], dim=-1)
 
             if args.signal == 'reward' or torch.count_nonzero(is_terminal).item() == 0:
-                prediction = model([embedding, attended_action, False])[0].squeeze(dim=-1)
+                prediction = model([embedding, attended_action, moving_boxes, False])[0].squeeze(dim=-1)
                 if args.object_wise != 'True':
                     prediction = prediction.sum(-1, keepdims=True)
                 loss = functional.mse_loss(prediction, ground_truth)
             else:
                 is_not_terminal = ~is_terminal
-                prediction_not_terminal = model([embedding[is_not_terminal], attended_action[is_not_terminal], False])[
+                prediction_not_terminal = model([embedding[is_not_terminal], attended_action[is_not_terminal], moving_boxes[is_not_terminal], False])[
                     0].squeeze(dim=-1)
                 loss_not_terminal = functional.mse_loss(prediction_not_terminal, ground_truth[is_not_terminal],
                                                         reduction='none')
-                prediction_terminal = model([embedding[is_terminal], attended_action[is_terminal], False])[0].squeeze(
+                prediction_terminal = model([embedding[is_terminal], attended_action[is_terminal], moving_boxes[is_terminal], False])[0].squeeze(
                     dim=-1)
                 ground_truth_terminal = ground_truth[is_terminal].unsqueeze(-1).expand_as(prediction_terminal)
 
