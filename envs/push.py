@@ -1,3 +1,4 @@
+import collections
 import random
 
 import gym
@@ -9,7 +10,10 @@ import sys
 import copy
 
 import matplotlib as mpl
-mpl.use('Agg')
+
+from envs.utils import PathFinder
+
+# mpl.use('Agg')
 from matplotlib import pyplot as plt
 
 
@@ -506,29 +510,151 @@ class AdHocPushAgent:
     def __init__(self, env: Push, random_action_proba=0.5):
         self.env = None
         self.random_action_proba = random_action_proba
+        self.active2passive = None
+        self.passive2active = None
+        self.is_x_first = None
         self.set_env(env)
 
     def set_env(self, env: Push):
         self.env = env
-        assert len(env.passive_box_ids) == 0
-        assert not env.do_reward_push_only
-        assert env.do_reward_active_box
+        self.active2passive = {}
+        self.passive2active = {}
+        passive_box_ids = list(self.env.passive_box_ids)
+        random.shuffle(passive_box_ids)
+        self.is_x_first = {box_id: i % 2 == random.randint(0, 1) for i, box_id in enumerate(passive_box_ids)}
 
-    def act(self, observation, reward, done):
-        if random.random() < self.random_action_proba:
-            return self.env.action_space.sample()
+    def _get_direction_along_shortest_path(self, source, target, is_passive, is_x_first):
+        occupied_positions = []
+        goal_id = self._get_goal_id()
+        occupied_positions.append(self.env.box_pos[goal_id])
 
-        box_pos_in_game = [(idx, box_pos) for idx, box_pos in enumerate(self.env.box_pos)
-                           if idx not in self.env.goal_ids and idx not in self.env.static_box_ids and box_pos[0] != -1]
-        idx, box_pos = random.choice(box_pos_in_game)
-        goal_pos = self.env.box_pos[next(iter(self.env.goal_ids))]
-        delta = goal_pos - box_pos
+        for box_id in self.env.active_box_ids_in_game.union(self.env.passive_box_ids_in_game):
+            occupied_positions.append(self.env.box_pos[box_id])
+
+        if is_passive:
+            for i in range(self.env.w - 1):
+                occupied_positions.append((i, 0))
+                occupied_positions.append((self.env.w - 1, i))
+                occupied_positions.append((self.env.w - 1 - i, self.env.w - 1))
+                occupied_positions.append((0, self.env.w - 1 - i))
+
+        path_finder = PathFinder(self.env.w, source, target, occupied_positions, is_x_first, debug=True)
+        path = path_finder.find_path()
+        if path is None:
+            return None
+
+        return path[1][0] - path[0][0], path[1][1] - path[0][1]
+
+    def _bind_active_and_passive_boxes(self):
+        for active_box_id in self.active2passive.keys() - self.env.active_box_ids_in_game:
+            passive_box_id = self.active2passive[active_box_id]
+            del self.active2passive[active_box_id]
+
+            if passive_box_id in self.passive2active:
+                del self.passive2active[passive_box_id]
+
+        for passive_box_id in self.passive2active.keys() - self.env.passive_box_ids_in_game:
+            active_box_id = self.passive2active[passive_box_id]
+            del self.passive2active[passive_box_id]
+
+            if active_box_id in self.active2passive:
+                del self.active2passive[active_box_id]
+
+        assert len(self.active2passive) == len(self.passive2active)
+
+        active_box_ids = list(self.env.active_box_ids_in_game - self.active2passive.keys())
+        passive_box_ids = list(self.env.passive_box_ids_in_game - self.passive2active.keys())
+        for box_ids in active_box_ids, passive_box_ids:
+            random.shuffle(box_ids)
+
+        for active_box_id, passive_box_id in zip(active_box_ids, passive_box_ids):
+            self.active2passive[active_box_id] = passive_box_id
+            self.passive2active[passive_box_id] = active_box_id
+
+    def _select_object_to_move(self):
+        object_ids = list(self.env.active_box_ids_in_game)
+        random.shuffle(object_ids)
+        return object_ids
+
+    def _get_goal_id(self):
+        return next(iter(self.env.goal_ids))
+
+    def _rotate_axes(self, passive_box_id):
+        assert passive_box_id in self.env.passive_box_ids_in_game
+        axes_order = self.is_x_first[passive_box_id]
+        axes_order[0], axes_order[1] = axes_order[1], axes_order[0]
+
+    def _get_passive_box_direction(self, passive_box_id):
+        assert passive_box_id in self.env.passive_box_ids_in_game
+        box_pos = tuple(self.env.box_pos[passive_box_id].tolist())
+        goal_pos = tuple(self.env.box_pos[next(iter(self.env.goal_ids))].tolist())
+        is_x_first = self.is_x_first[passive_box_id]
+        return self._get_direction_along_shortest_path(box_pos, goal_pos, is_passive=True, is_x_first=is_x_first)
+
+    def _get_active_box_direction(self, active_box_id, target_pos):
+        assert active_box_id in self.env.active_box_ids_in_game
+        box_pos = self.env.box_pos[active_box_id]
+        delta = np.asarray(target_pos) - box_pos
         if np.abs(delta)[0] >= np.abs(delta)[1]:
             direction = (int(delta[0] > 0) * 2 - 1, 0)
         else:
             direction = (0, int(delta[1] > 0) * 2 - 1)
 
-        return idx * 4 + self.env.direction2action[direction]
+        return direction
+
+    def _get_action(self, active_box_id, direction):
+        return active_box_id * 4 + self.env.direction2action[direction]
+
+    def _get_occupied_box_id(self, position):
+        return self.env._get_occupied_box_id(position)
+
+    def _get_passive_boxes_to_move(self):
+        raise NotImplementedError()
+
+    def _move_straight(self):
+        raise NotImplementedError()
+
+    @staticmethod
+    def _invert_direction(direction):
+        return -direction[0], -direction[1]
+
+    def act(self, observation, reward, done):
+        if random.random() < self.random_action_proba:
+            return self.env.action_space.sample()
+
+        self._bind_active_and_passive_boxes()
+        for active_box_id in self._select_object_to_move():
+            if active_box_id not in self.active2passive:
+                active_box_pos = tuple(self.env.box_pos[active_box_id].tolist())
+                goal_pos = tuple(self.env.box_pos[next(iter(self.env.goal_ids))].tolist())
+                direction = self._get_direction_along_shortest_path(active_box_pos, goal_pos, is_passive=False,
+                                                        is_x_first=bool(random.randint(0, 1)))
+
+                if direction is None:
+                    continue
+
+                return self._get_action(active_box_id, direction)
+
+            passive_box_id = self.active2passive[active_box_id]
+            passive_box_pos = tuple(self.env.box_pos[passive_box_id].tolist())
+            direction = self._get_passive_box_direction(passive_box_id)
+            if direction is None:
+                continue
+
+            push_pos = tuple(
+                coord1 + coord2 for coord1, coord2 in zip(passive_box_pos, AdHocPushAgent._invert_direction(direction)))
+            if self._get_occupied_box_id(push_pos) != -1:
+                continue
+
+            active_box_pos = tuple(self.env.box_pos[active_box_id].tolist())
+            if active_box_pos != push_pos:
+                direction = self._get_direction_along_shortest_path(active_box_pos, push_pos, is_passive=False, is_x_first=bool(random.randint(0, 1)))
+                if direction is None:
+                    continue
+
+            return self._get_action(active_box_id, direction)
+
+        return self.env.action_space.sample()
 
 
 class RandomPushAgent:
@@ -548,16 +674,35 @@ if __name__ == "__main__":
     If called directly with argument "random", evaluates the average return of a random policy.
     If called without arguments, starts an interactive game played with wasd to move, q to quit.
     """
-    env = Push(n_active_boxes=3, n_passive_boxes=1, n_goals=1, width=5, render_scale=10, channel_wise=False,
+    seed = 0
+    random.seed(seed)
+    env = Push(n_active_boxes=1, n_passive_boxes=3, n_goals=1, width=5, render_scale=10, channel_wise=False,
                return_state=False, observation_type='shapes', max_episode_steps=75, channels_first=False,
-               ternary_interactions=True, do_reward_push_only=False, do_reward_active_box=True, )
+               ternary_interactions=True, do_reward_push_only=False, do_reward_active_box=True, seed=seed)
 
     if len(sys.argv) > 1:
         if sys.argv[1] == "random":
             agent = RandomPushAgent(env)
         elif sys.argv[1] == "ad_hoc":
             proba = float(sys.argv[2])
+            s = env.reset()
             agent = AdHocPushAgent(env, random_action_proba=proba)
+            done = False
+            episode_r = 0
+            l = 0
+            plt.imshow(s)
+            plt.show()
+            env.print()
+            while not done:
+                a = agent.act(None, None, None)
+                s, r, done, info = env.step(a)
+                episode_r += r
+                l += 1
+                env.print(
+                    f'Action: {a}. Direction: {env.directions[a % 4]}. Episode reward: {episode_r}. Moving objects: {info[Push.MOVING_BOXES_KEY]}')
+                plt.imshow(s)
+                plt.show()
+            sys.exit(0)
         else:
             raise ValueError(f'Unexpected agent type: {sys.argv[1]}')
 
