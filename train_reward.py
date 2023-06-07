@@ -109,6 +109,7 @@ def main():
     model_file = os.path.join(save_folder, f'{args.model_name}_model.pt')
     encoder_file = os.path.join(save_folder, 'encoder.pt')
     attention_file = os.path.join(save_folder, 'attention.pt')
+    interactions_file = os.path.join(save_folder, 'interactions.pt')
     log_file = os.path.join(save_folder, f'{args.model_name}_log.txt')
 
     logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -211,6 +212,24 @@ def main():
     else:
         cswm = modules.ContrastiveSWM(**cswm_model_args).to(device)
 
+    interactions = None
+    if cswm_args.interactions == 'gnn':
+        interactions = modules.TransitionGNN(
+            input_dim=cswm_args.embedding_dim,
+            hidden_dim=cswm_args.hidden_dim,
+            action_dim=cswm_args.action_dim,
+            num_objects=cswm_args.num_objects,
+            ignore_action=False,
+            copy_action=True,
+            use_interactions=cswm_args.use_interactions == 'True',
+            edge_actions=True,
+            output_dim=1,
+        ).to(device)
+        interactions.load_state_dict(torch.load(interactions_file))
+        interactions = interactions.eval()
+        for param in interactions.parameters():
+            param.requires_grad = False
+
     cswm.load_state_dict(torch.load(cswm_model_file))
     cswm = cswm.eval()
     for param in cswm.parameters():
@@ -293,6 +312,14 @@ def main():
                 ground_truth = returns.to(torch.float32).squeeze()
                 assert args.ignore_action
                 attended_action = torch.zeros_like(action)
+
+            if cswm_args.interactions == 'gnn':
+                logit = interactions([embedding, action, torch.ones_like(moving_boxes), False])[0].squeeze(dim=2)
+                moving_boxes = torch.sigmoid(logit)
+            elif cswm_args.interactions == 'complete':
+                moving_boxes = torch.ones_like(moving_boxes)
+            elif cswm_args.interactions == 'none':
+                moving_boxes = torch.zeros_like(moving_boxes)
 
             if use_next_state:
                 next_embedding = encoder(next_obs)

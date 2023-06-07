@@ -74,6 +74,7 @@ parser.add_argument('--shuffle-objects', type=bool, default=False)
 parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
 parser.add_argument('--edge_actions', type=str, choices=['True', 'False'], default='False')
 parser.add_argument('--attention', type=str, choices=['hard', 'soft', 'ground_truth', 'none', 'gnn'], required=True)
+parser.add_argument('--interactions', type=str, choices=['complete', 'ground_truth', 'gnn', 'soft', 'none'], default='complete')
 parser.add_argument('--use_gt_attention', type=str, choices=['True', 'False'], default='False')
 parser.add_argument('--neg_loss_coef', type=float, default=1)
 parser.add_argument('--num_layers', type=int, default=3)
@@ -112,6 +113,7 @@ if not os.path.exists(save_folder):
 meta_file = os.path.join(save_folder, 'metadata.pkl')
 model_file = os.path.join(save_folder, 'model.pt')
 attention_file = os.path.join(save_folder, 'attention.pt')
+interactions_file = os.path.join(save_folder, 'interactions.pt')
 decoder_file = os.path.join(save_folder, 'decoder.pt')
 log_file = os.path.join(save_folder, 'log.txt')
 
@@ -181,6 +183,21 @@ elif args.attention == 'gnn':
 else:
     model = modules.ContrastiveSWM(**model_args)
 
+interactions = None
+if args.interactions == 'gnn':
+    interactions = modules.TransitionGNN(
+        input_dim=args.embedding_dim,
+        hidden_dim=args.hidden_dim,
+        action_dim=args.action_dim,
+        num_objects=args.num_objects,
+        ignore_action=False,
+        copy_action=True,
+        use_interactions=args.use_interactions == 'True',
+        edge_actions=True,
+        output_dim=1,
+    ).to(device)
+    interactions.apply(utils.weights_init)
+
 model = model.to(device)
 
 model.apply(utils.weights_init)
@@ -248,6 +265,8 @@ if args.pretrained_cswm_path is not None:
 parameters = list(model.parameters())
 if attention is not None:
     parameters += list(attention.parameters())
+if interactions is not None:
+    parameters += list(interactions.parameters())
 if decoder is not None:
     parameters += list(decoder.parameters())
 optimizer = torch.optim.Adam(parameters, lr=args.learning_rate)
@@ -325,8 +344,8 @@ for epoch in range(1, args.epochs + 1):
             loss += next_loss
         else:
             loss = 0
+            orig_action = action
             if args.attention in ('gnn', 'ground_truth'):
-                orig_action = action
                 action = utils.to_one_hot(action, args.action_dim).repeat(1, args.num_objects).view(-1,
                                                                                                     args.num_objects,
                                                                                                     args.action_dim)
@@ -342,6 +361,15 @@ for epoch in range(1, args.epochs + 1):
                         epoch_metrics['attention_loss'] += loss.item() * obs.size()[0]
 
                     action = action * torch.sigmoid(logit)
+
+            if args.interactions == 'gnn':
+                embedding = model.obj_encoder(model.obj_extractor(obs))
+                logit = interactions([embedding, orig_action, torch.ones_like(moving_boxes), False])[0].squeeze(dim=2)
+                moving_boxes = torch.sigmoid(logit)
+            elif args.interactions == 'complete':
+                moving_boxes = torch.ones_like(moving_boxes)
+            elif args.interactions == 'none':
+                moving_boxes = torch.zeros_like(moving_boxes)
 
             if args.reconstruction == 'True':
                 state, next_state = model.extract_objects_(obs, next_obs)
@@ -399,3 +427,5 @@ for epoch in range(1, args.epochs + 1):
             torch.save(attention.state_dict(), attention_file)
         if decoder is not None:
             torch.save(decoder.state_dict(), decoder_file)
+        if interactions is not None:
+            torch.save(interactions.state_dict(), interactions_file)

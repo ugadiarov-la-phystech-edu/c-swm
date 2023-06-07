@@ -285,7 +285,7 @@ class TransitionGNN(torch.nn.Module):
             # edge_index: [B * (num_objects*[num_objects-1]), 2] edge list
             edge_index = self._get_edge_list_fully_connected(
                 batch_size, num_nodes, device)
-            interaction_flag = torch.all(moved_boxes.flatten()[edge_index.T], dim=1, keepdim=True).to(torch.float32)
+            interaction_flag = torch.prod(moved_boxes.flatten()[edge_index.T], dim=1, keepdim=True).to(torch.float32)
 
             row, col = edge_index
             edge_attr = self._edge_model(node_attr[row], node_attr[col], action_vec[row] if self.edge_actions else None)
