@@ -20,7 +20,6 @@ import torch.nn.functional as F
 import modules
 import wandb
 
-
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch-size', type=int, default=1024,
                     help='Batch size.')
@@ -74,15 +73,15 @@ parser.add_argument('--shuffle-objects', type=bool, default=False)
 parser.add_argument('--use_interactions', type=str, choices=['True', 'False'])
 parser.add_argument('--edge_actions', type=str, choices=['True', 'False'], default='False')
 parser.add_argument('--attention', type=str, choices=['hard', 'soft', 'ground_truth', 'none', 'gnn'], required=True)
-parser.add_argument('--interactions', type=str, choices=['complete', 'ground_truth', 'gnn', 'soft', 'none'], default='complete')
+parser.add_argument('--interactions', type=str, choices=['complete', 'ground_truth', 'gnn', 'soft', 'none'],
+                    default='complete')
 parser.add_argument('--use_gt_attention', type=str, choices=['True', 'False'], default='False')
 parser.add_argument('--neg_loss_coef', type=float, default=1)
 parser.add_argument('--num_layers', type=int, default=3)
 parser.add_argument('--key_query_size', type=int, default=512)
 parser.add_argument('--value_size', type=int, default=512)
 parser.add_argument('--pretrained_cswm_path', type=str)
-parser.add_argument('--reconstruction', type=str, choices=['True', 'False'], default='False')
-parser.add_argument('--reconstruction_loss_coef', type=float, default=1)
+parser.add_argument('--reconstruction_loss_coef', type=float, default=0)
 parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
 
@@ -90,7 +89,8 @@ args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
 if args.edge_actions == 'True':
-    assert args.attention in ('ground_truth', 'none'), f'Unsupported attention type={args.attention} for edge_actions={args.edge_actions}.'
+    assert args.attention in (
+        'ground_truth', 'none'), f'Unsupported attention type={args.attention} for edge_actions={args.edge_actions}.'
 
 now = datetime.datetime.now()
 timestamp = now.isoformat()
@@ -130,7 +130,6 @@ train_loader = data.DataLoader(
     dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
 # Get data sample
-# obs = train_loader.__iter__().next()[0]
 obs = next(iter(train_loader))[0]
 input_shape = obs[0].size()
 
@@ -200,12 +199,12 @@ if args.interactions == 'gnn':
     interactions.apply(utils.weights_init)
 elif args.interactions == 'soft':
     interactions = modules.AttentionV1(
-            state_size=args.embedding_dim,
-            action_size=args.action_dim,
-            key_query_size=args.hidden_dim,
-            value_size=args.hidden_dim,
-            sqrt_scale=True,
-            use_sigmoid=True,
+        state_size=args.embedding_dim,
+        action_size=args.action_dim,
+        key_query_size=args.hidden_dim,
+        value_size=args.hidden_dim,
+        sqrt_scale=True,
+        use_sigmoid=True,
     ).to(device)
     interactions.apply(utils.weights_init)
 
@@ -214,7 +213,7 @@ model = model.to(device)
 model.apply(utils.weights_init)
 
 decoder = None
-if args.reconstruction == 'True':
+if args.reconstruction_loss_coef > 0:
     decoder = modules.DecoderMLPChannelWise(
         input_dim=args.embedding_dim, hidden_dim=args.hidden_dim, output_size=input_shape[1:]
     )
@@ -306,7 +305,6 @@ if args.decoder:
         decoder.parameters(),
         lr=args.learning_rate)
 
-
 # Train model.
 print('Starting model training...')
 step = 0
@@ -320,9 +318,9 @@ wandb.init(
 
 for epoch in range(1, args.epochs + 1):
     model.train()
-    train_loss = 0
     epoch_metrics = collections.Counter()
     n = 0
+    k = 0
     start = time.perf_counter()
 
     for batch_idx, data_batch in enumerate(train_loader):
@@ -386,9 +384,8 @@ for epoch in range(1, args.epochs + 1):
             elif args.interactions == 'none':
                 moving_boxes = torch.zeros_like(moving_boxes)
 
-            if args.reconstruction == 'True':
+            if args.reconstruction_loss_coef > 0:
                 state, next_state = model.extract_objects_(obs, next_obs)
-                transition_loss = model.transition_loss(state, action, next_state)
                 reconstructed_obs = decoder(state).view_as(obs)
                 reconstruction_loss = torch.nn.functional.binary_cross_entropy_with_logits(reconstructed_obs, obs)
 
@@ -397,20 +394,23 @@ for epoch in range(1, args.epochs + 1):
                     terminal_obs /= args.pixel_scale
                     terminal_state = model.obj_encoder(model.obj_extractor(terminal_obs))
                     terminal_reconstructed_obs = decoder(terminal_state).view_as(terminal_obs)
-                    reconstruction_loss += \
-                        torch.nn.functional.binary_cross_entropy_with_logits(terminal_reconstructed_obs, terminal_obs)
-                loss += transition_loss + args.reconstruction_loss_coef * reconstruction_loss
-                metrics = {'transition_loss': transition_loss.item(), 'reconstruction_loss': reconstruction_loss.item()}
-            else:
-                loss_contrastive, metrics = model.contrastive_loss(obs, action, next_obs, moving_boxes)
-                loss += loss_contrastive
+                    reconstruction_loss = reconstruction_loss * obs.size()[0] + \
+                                          torch.nn.functional.binary_cross_entropy_with_logits(
+                                              terminal_reconstructed_obs, terminal_obs) * terminal_obs.size()[0]
+                    reconstruction_loss /= data_batch[0].size()[0]
+                loss += args.reconstruction_loss_coef * reconstruction_loss
+                epoch_metrics['reconstruction_loss'] += args.reconstruction_loss_coef * reconstruction_loss.item() * \
+                                                        data_batch[0].size()[0]
+
+            loss_contrastive, metrics = model.contrastive_loss(obs, action, next_obs, moving_boxes)
+            loss += loss_contrastive
             for key, value in metrics.items():
                 epoch_metrics[key] += value * obs.size(0)
 
         loss.backward()
-        train_loss += loss.item() * obs.size(0)
         optimizer.step()
         n += obs.size(0)
+        k += data_batch[0].size()[0]
 
         if args.decoder:
             optimizer_dec.step()
@@ -425,15 +425,18 @@ for epoch in range(1, args.epochs + 1):
 
         step += 1
 
-    avg_loss = train_loss / n
-    record = {key: value / n for key, value in epoch_metrics.items()}
-    record['loss'] = avg_loss
-    record['epoch'] = epoch
-    record['fps'] = n / (time.perf_counter() - start)
+    epoch_metrics['reconstruction_loss'] /= k
+    epoch_metrics['transition_loss'] /= n
+    epoch_metrics['contrastive_loss'] /= n
+    avg_loss = epoch_metrics['reconstruction_loss'] + epoch_metrics['transition_loss'] + \
+        epoch_metrics['contrastive_loss']
+    epoch_metrics['loss'] = avg_loss
+    epoch_metrics['epoch'] = epoch
+    epoch_metrics['fps'] = k / (time.perf_counter() - start)
     print('====> Epoch: {} Average loss: {:.8f}'.format(
         epoch, avg_loss))
 
-    wandb.log(record)
+    wandb.log(epoch_metrics)
 
     if avg_loss < best_loss:
         best_loss = avg_loss
