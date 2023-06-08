@@ -225,6 +225,17 @@ def main():
             edge_actions=True,
             output_dim=1,
         ).to(device)
+    elif cswm_args.interactions == 'soft':
+        interactions = modules.AttentionV1(
+                state_size=cswm_args.embedding_dim,
+                action_size=cswm_args.action_dim,
+                key_query_size=cswm_args.hidden_dim,
+                value_size=cswm_args.hidden_dim,
+                sqrt_scale=True,
+                use_sigmoid=True,
+        ).to(device)
+
+    if interactions is not None:
         interactions.load_state_dict(torch.load(interactions_file))
         interactions = interactions.eval()
         for param in interactions.parameters():
@@ -316,6 +327,9 @@ def main():
             if cswm_args.interactions == 'gnn':
                 logit = interactions([embedding, action, torch.ones_like(moving_boxes), False])[0].squeeze(dim=2)
                 moving_boxes = torch.sigmoid(logit)
+            elif cswm_args.interactions == 'soft':
+                one_hot_action = utils.to_one_hot(action, args.action_dim)
+                moving_boxes = interactions([embedding, one_hot_action], return_weights=True)[1]
             elif cswm_args.interactions == 'complete':
                 moving_boxes = torch.ones_like(moving_boxes)
             elif cswm_args.interactions == 'none':

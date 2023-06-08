@@ -130,7 +130,8 @@ train_loader = data.DataLoader(
     dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
 # Get data sample
-obs = train_loader.__iter__().next()[0]
+# obs = train_loader.__iter__().next()[0]
+obs = next(iter(train_loader))[0]
 input_shape = obs[0].size()
 
 args.input_dims = tuple(input_shape)
@@ -195,6 +196,16 @@ if args.interactions == 'gnn':
         use_interactions=args.use_interactions == 'True',
         edge_actions=True,
         output_dim=1,
+    ).to(device)
+    interactions.apply(utils.weights_init)
+elif args.interactions == 'soft':
+    interactions = modules.AttentionV1(
+            state_size=args.embedding_dim,
+            action_size=args.action_dim,
+            key_query_size=args.hidden_dim,
+            value_size=args.hidden_dim,
+            sqrt_scale=True,
+            use_sigmoid=True,
     ).to(device)
     interactions.apply(utils.weights_init)
 
@@ -366,6 +377,10 @@ for epoch in range(1, args.epochs + 1):
                 embedding = model.obj_encoder(model.obj_extractor(obs))
                 logit = interactions([embedding, orig_action, torch.ones_like(moving_boxes), False])[0].squeeze(dim=2)
                 moving_boxes = torch.sigmoid(logit)
+            elif args.interactions == 'soft':
+                embedding = model.obj_encoder(model.obj_extractor(obs))
+                one_hot_action = utils.to_one_hot(action, args.action_dim)
+                moving_boxes = interactions([embedding, one_hot_action], return_weights=True)[1]
             elif args.interactions == 'complete':
                 moving_boxes = torch.ones_like(moving_boxes)
             elif args.interactions == 'none':
