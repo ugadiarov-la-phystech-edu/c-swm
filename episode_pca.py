@@ -26,10 +26,10 @@ def masks_and_reconstruction(masks, reconstructions):
     img = np.concatenate([masks, reconstructions], axis=0)
     img = skimage.transform.rescale(
         skimage.util.montage(img, fill=(255,) * 3, grid_shape=(2, masks.shape[0]), padding_width=3,
-                             channel_axis=-1),
+                             multichannel=True),
         order=0,
         scale=2,
-        channel_axis=-1
+        multichannel=True
     )
     return img
 
@@ -50,6 +50,35 @@ def mpl_to_numpy(fig, dpi):
         buff.seek(0)
         return np.reshape(np.frombuffer(buff.getvalue(), dtype=np.uint8),
                           newshape=(int(fig.bbox.bounds[3]), int(fig.bbox.bounds[2]), -1))
+
+
+def histograms(pca_embeddings, title):
+    colors = utils.get_colors(num_colors=9)
+    flatten = pca_embeddings.reshape((-1, pca_embeddings.shape[-1]))
+    delta = flatten.max(axis=0) - flatten.min(axis=0)
+    max_x, max_y = flatten.max(axis=0) + 0.05 * delta
+    min_x, min_y = flatten.min(axis=0) - 0.05 * delta
+
+    plt.rc('xtick', labelsize=15)
+    plt.rc('ytick', labelsize=15)
+    fig, axes = plt.subplots(1, pca_embeddings.shape[1], figsize=(20, 5), dpi=100)
+    fig.suptitle(title)
+    fig.tight_layout()
+    for object_id in range(pca_embeddings.shape[1]):
+        alpha, xedges, yedges = np.histogram2d(pca_embeddings[:, object_id, 0], pca_embeddings[:, object_id, 1], bins=20, range=((min_x, max_x), (min_y, max_y)))
+        alpha = alpha.T / alpha.max()
+        alpha = np.expand_dims(alpha, axis=2).repeat(repeats=3, axis=2)
+        foreground = np.zeros_like(alpha)
+        foreground[:] = colors[object_id][:3]
+        background = np.ones_like(alpha)
+        histogram = alpha * foreground + (1 - alpha) * background
+
+        axes[object_id].set_ylim((min_y, max_y))
+        axes[object_id].set_xlim((min_x, max_x))
+        X, Y = np.meshgrid(xedges, yedges)
+        axes[object_id].pcolormesh(X, Y, histogram)
+
+    return mpl_to_numpy(fig, dpi=100)
 
 
 def plot_pca_episode_embeddings(pca_episode_embeddings, title, marker_size=700, history_size=3):
@@ -202,6 +231,8 @@ if __name__ == '__main__':
     embeddings_scaled = scaler.transform(embeddings)
 
     pca = decomposition.PCA(n_components=args.n_components).fit(embeddings_scaled)
+    pca_embeddings = pca.transform(embeddings_scaled).reshape((-1, cswm_args.num_objects, args.n_components))
+    histogram = histograms(pca_embeddings, title=args.title)
     pca_episode_embedding = pca.transform(scaler.transform(episode_embeddings.reshape((-1, episode_embeddings.shape[-1]))))
     pca_episode_embedding = pca_episode_embedding.reshape((*episode_embeddings.shape[:2], args.n_components))
 
@@ -233,5 +264,5 @@ if __name__ == '__main__':
         name=args.run_id
     )
 
-    wandb.log({'episode_table': table})
+    wandb.log({'episode_table': table, 'histograms': wandb.Image(histogram)})
     wandb.finish()
