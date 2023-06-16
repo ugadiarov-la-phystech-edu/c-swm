@@ -76,6 +76,8 @@ parser.add_argument('--edge_actions', type=str, choices=['True', 'False'], defau
 parser.add_argument('--attention', type=str, choices=['hard', 'soft', 'ground_truth', 'none', 'gnn'], required=True)
 parser.add_argument('--interactions', type=str, choices=['complete', 'ground_truth', 'gnn', 'soft', 'none'],
                     default='complete')
+parser.add_argument('--share_interactions_model', type=str, choices=['True', 'False'],
+                    default='False')
 parser.add_argument('--use_gt_attention', type=str, choices=['True', 'False'], default='False')
 parser.add_argument('--neg_loss_coef', type=float, default=1)
 parser.add_argument('--reward_loss_coef', type=float, default=1)
@@ -234,6 +236,9 @@ if interactions_transition is not None:
     interactions_transition.apply(utils.weights_init)
     interactions_reward.apply(utils.weights_init)
 
+if args.share_interactions_model == 'True':
+    interactions_reward = interactions_transition
+
 decoder = None
 if args.reconstruction_loss_coef > 0:
     decoder = modules.DecoderMLPChannelWise(
@@ -327,7 +332,7 @@ for interactions in (interactions_transition, interactions_reward):
 if decoder is not None:
     parameters += list(decoder.parameters())
 
-optimizer = torch.optim.Adam(parameters, lr=args.learning_rate)
+optimizer = torch.optim.Adam(set(parameters), lr=args.learning_rate)
 
 # Train model.
 print('Starting model training...')
