@@ -8,6 +8,10 @@ import collections
 import sys
 from pathlib import Path
 
+from gym.wrappers import TimeLimit
+from omegaconf import OmegaConf
+
+from envs.cw_envs import CwTargetEnv
 from envs.push import Push, AdHocPushAgent
 
 if str(Path.cwd()) not in sys.path:
@@ -60,6 +64,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=None)
     parser.add_argument('--env_id', type=str, default='ShapesTrain-v0',
                         help='Select the environment to run.')
+    parser.add_argument('--env_type', type=str, choices=['gym', 'cw'], default='gym',
+                        help='Select the environment to run.')
     parser.add_argument('--fname', type=str, default='data/shapes_train.h5',
                         help='Save path for replay buffer.')
     parser.add_argument('--num_episodes', type=int, default=1000,
@@ -77,11 +83,18 @@ if __name__ == '__main__':
     logger.set_level(logger.INFO)
     use_rle = args.rle is not None and args.rle == 'True'
 
-    env = gym.make(args.env_id)
+    if args.env_type == 'gym':
+        env = gym.make(args.env_id)
+        env.seed(args.seed)
+    elif args.env_type == 'cw':
+        config = OmegaConf.load(f'envs/config/{args.env_id}.yaml')
+        env = CwTargetEnv(config, args.seed)
+        env = TimeLimit(env, env.unwrapped._max_episode_length)
+    else:
+        raise ValueError(f'Unknown environment: type={args.env_type} env_id={args.env_id}')
 
     np.random.seed(args.seed)
     env.action_space.seed(args.seed)
-    env.seed(args.seed)
 
     if args.ad_hoc_agent == 'True':
         assert isinstance(env.unwrapped, Push)
@@ -107,6 +120,7 @@ if __name__ == '__main__':
 
     replay_buffer = []
     lengths = []
+    successes = []
     image_shape = None
 
     for i in range(episode_count):
@@ -139,28 +153,42 @@ if __name__ == '__main__':
                 if done:
                     break
         else:
-            image_shape = ob[1].shape
+            if args.env_type == 'cw':
+                ob = ob
+            else:
+                ob = ob[1]
+
+            image_shape = ob.shape
+            is_success = False
             while True:
-                add_observation(use_rle, replay_buffer[i], ob[1])
+                add_observation(use_rle, replay_buffer[i], ob)
 
                 action = agent.act(ob, reward, done)
                 ob, reward, done, info = env.step(action)
+                if args.env_type == 'cw':
+                    ob = ob
+                else:
+                    ob = ob[1]
 
                 replay_buffer[i]['action'].append(action)
                 replay_buffer[i]['reward'].append(reward)
-                replay_buffer[i][Push.MOVING_BOXES_KEY].append(info[Push.MOVING_BOXES_KEY])
-                add_observation(use_rle, replay_buffer[i], ob[1], next_obs=True)
+                if Push.MOVING_BOXES_KEY in info:
+                    replay_buffer[i][Push.MOVING_BOXES_KEY].append(info[Push.MOVING_BOXES_KEY])
+                add_observation(use_rle, replay_buffer[i], ob, next_obs=True)
+                if not is_success and 'is_success' in info:
+                    is_success = info['is_success']
 
                 if done:
                     lengths.append(len(replay_buffer[i]['action']))
+                    successes.append(int(is_success))
                     break
 
-        if i % 10 == 0:
+        if i % 10 == 0 or i == episode_count - 1:
             mean_length = 0
             success_rate = 0
             if len(lengths) > 0:
                 mean_length = sum(lengths) / len(lengths)
-                success_rate = sum(length < 100 for length in lengths) / len(lengths)
+                success_rate = sum(successes) / len(successes)
             print(f"iter {i}, mean episode length: {mean_length}, success rate: {success_rate}")
 
     env.close()
