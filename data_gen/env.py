@@ -183,13 +183,13 @@ if __name__ == '__main__':
                     successes.append(int(is_success))
                     break
 
-        if i % 10 == 0 or i == episode_count - 1:
+        if i % 100 == 0 or i == episode_count - 1:
             mean_length = 0
             success_rate = 0
             if len(lengths) > 0:
                 mean_length = sum(lengths) / len(lengths)
                 success_rate = sum(successes) / len(successes)
-            print(f"iter {i}, mean episode length: {mean_length}, success rate: {success_rate}")
+            print(f"iter {i}, mean episode length: {mean_length}, success rate: {success_rate}", flush=True)
 
     env.close()
 
