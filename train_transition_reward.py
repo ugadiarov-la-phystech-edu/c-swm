@@ -88,6 +88,7 @@ parser.add_argument('--pretrained_cswm_path', type=str)
 parser.add_argument('--reconstruction_loss_coef', type=float, default=0)
 parser.add_argument('--project', type=str, required=True)
 parser.add_argument('--run_id', type=str, default='run-0')
+parser.add_argument('--move_channels_axis', type=str, choices=['True', 'False'], default='False')
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -137,6 +138,8 @@ train_loader = data.DataLoader(
 
 # Get data sample
 obs = next(iter(train_loader))[0]
+if args.move_channels_axis == 'True':
+    obs = torch.moveaxis(obs, -1, 1)
 input_shape = obs[0].size()
 
 args.input_dims = tuple(input_shape)
@@ -355,6 +358,9 @@ for epoch in range(1, args.epochs + 1):
     for batch_idx, data_batch in enumerate(train_loader):
         data_batch = [tensor.to(device) for tensor in data_batch]
         obs, action, moving_boxes, next_obs, rewards, returns, is_terminal = data_batch
+        if args.move_channels_axis == 'True':
+            obs = torch.moveaxis(obs, -1, 1)
+            next_obs = torch.moveaxis(next_obs, -1, 1)
         if torch.all(is_terminal).item():
             continue
 
@@ -412,10 +418,10 @@ for epoch in range(1, args.epochs + 1):
                 moving_boxes = interactions_transition([embedding, one_hot_action], return_weights=True)[1]
                 moving_boxes_reward = interactions_reward([embedding, one_hot_action], return_weights=True)[1]
             elif args.interactions == 'complete':
-                moving_boxes = torch.ones_like(moving_boxes)
+                moving_boxes = torch.ones(obs.size(0), args.num_objects, dtype=torch.float32, device=obs.device)
                 moving_boxes_reward = moving_boxes
             elif args.interactions == 'none':
-                moving_boxes = torch.zeros_like(moving_boxes)
+                moving_boxes = torch.zeros(obs.size(0), args.num_objects, dtype=torch.float32, device=obs.device)
                 moving_boxes_reward = moving_boxes
 
             if args.reconstruction_loss_coef > 0:

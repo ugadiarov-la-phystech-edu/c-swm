@@ -154,11 +154,21 @@ class StateTransitionsDataset(data.Dataset):
         self.gamma = gamma
         self.has_returns = False
         self.experience_buffer, self.use_rle, self.image_shape = load_list_dict_h5py(hdf5_file)
-        self.n_boxes = len(self.experience_buffer[0]['moving_boxes'][0])
+        self.n_boxes = -1
+        if 'moving_boxes' in self.experience_buffer[0]:
+            self.n_boxes = len(self.experience_buffer[0]['moving_boxes'][0])
+
+        self.action_dim = 0
+        episode_actions_shape = self.experience_buffer[0]['action'].shape
+        if len(episode_actions_shape) > 1:
+            assert len(episode_actions_shape) == 2, f'Expected flatten actions, actual action shape: {episode_actions_shape[1:]}'
+            self.action_dim = self.experience_buffer[0]['action'].shape[1]
 
         if hdf5_file_auxiliary is not None:
             experience_buffer_states, use_rle_states, image_shape_states = load_list_dict_h5py(hdf5_file_auxiliary)
-            n_boxes_states = len(experience_buffer_states[0]['moving_boxes'][0])
+            n_boxes_states = -1
+            if 'moving_boxes' in experience_buffer_states[0]:
+                n_boxes_states = len(experience_buffer_states[0]['moving_boxes'][0])
 
             assert use_rle_states == self.use_rle
             assert np.array_equal(image_shape_states, self.image_shape)
@@ -208,15 +218,25 @@ class StateTransitionsDataset(data.Dataset):
         if step == len(self.experience_buffer[ep]['action']):
             # Get the terminal observation
             obs = self._get_observation(ep, step - 1, next_obs=True)
-            action = -1
-            moving_boxes = np.full((self.n_boxes,), fill_value=-1, dtype=np.int64)
+            if self.action_dim == 0:
+                action = -1
+            else:
+                action = np.full((self.action_dim,), fill_value=-1, dtype=np.float32)
+
+            if self.n_boxes == -1:
+                moving_boxes = -1
+            else:
+                moving_boxes = np.full((self.n_boxes,), fill_value=-1, dtype=np.int64)
             next_obs = np.full_like(obs, fill_value=0)
             reward = np.nan
             is_terminal = True
         else:
             obs = self._get_observation(ep, step)
             action = self.experience_buffer[ep]['action'][step]
-            moving_boxes = self.experience_buffer[ep]['moving_boxes'][step]
+            if self.n_boxes == -1:
+                moving_boxes = -1
+            else:
+                moving_boxes = self.experience_buffer[ep]['moving_boxes'][step]
             next_obs = self._get_observation(ep, step, next_obs=True)
             reward = self.experience_buffer[ep]['reward'][step]
             is_terminal = False
