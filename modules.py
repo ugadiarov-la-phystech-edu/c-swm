@@ -898,3 +898,30 @@ class ActionConverter:
         indices = list(range(action.size(0)))
         new_action[indices, node_idx] = action.detach()
         return new_action
+
+
+class RewardModel(nn.Module):
+    def __init__(self, input_dim, hidden_dim, action_dim, num_objects, ignore_action=False, copy_action=False,
+                 act_fn='relu', layer_norm=True, num_layers=3, use_interactions=True, edge_actions=False):
+        super().__init__()
+        self.gnn = TransitionGNN(input_dim, hidden_dim, action_dim, num_objects, ignore_action, copy_action,
+                                 act_fn, layer_norm, num_layers, use_interactions, edge_actions)
+        self.mlp = nn.Linear(input_dim, 1)
+
+    def forward(self, x):
+        gnn_output = self.gnn(x)[0].mean(dim=1)
+        return self.mlp(gnn_output).squeeze(dim=1)
+
+
+class TerminationModel(nn.Module):
+    def __init__(self, input_dim, hidden_dim, action_dim, num_objects,
+                 act_fn='relu', layer_norm=True, num_layers=3, use_interactions=True):
+        super().__init__()
+        self.gnn = TransitionGNN(input_dim, hidden_dim, action_dim, num_objects, ignore_action=True, copy_action=False,
+                                 act_fn=act_fn, layer_norm=layer_norm, num_layers=num_layers,
+                                 use_interactions=use_interactions, edge_actions=False)
+        self.mlp = nn.Linear(input_dim, 1)
+
+    def forward(self, x):
+        gnn_output = self.gnn(x)[0].mean(dim=1)
+        return self.mlp(gnn_output).squeeze(dim=1)

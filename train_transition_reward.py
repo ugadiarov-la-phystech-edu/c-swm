@@ -81,6 +81,7 @@ parser.add_argument('--share_interactions_model', type=str, choices=['True', 'Fa
 parser.add_argument('--use_gt_attention', type=str, choices=['True', 'False'], default='False')
 parser.add_argument('--neg_loss_coef', type=float, default=1)
 parser.add_argument('--reward_loss_coef', type=float, default=1)
+parser.add_argument('--termination_loss_coef', type=float, default=0)
 parser.add_argument('--num_layers', type=int, default=3)
 parser.add_argument('--key_query_size', type=int, default=512)
 parser.add_argument('--value_size', type=int, default=512)
@@ -122,6 +123,7 @@ interactions_transition_file = os.path.join(save_folder, 'interactions_transitio
 decoder_file = os.path.join(save_folder, 'decoder.pt')
 reward_model_file = os.path.join(save_folder, 'reward_model.pt')
 interactions_reward_file = os.path.join(save_folder, 'interactions_reward.pt')
+termination_model_file = os.path.join(save_folder, 'termination_model.pt')
 log_file = os.path.join(save_folder, 'log.txt')
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -195,7 +197,7 @@ else:
 model = model.to(device)
 model.apply(utils.weights_init)
 
-reward_model = modules.TransitionGNN(
+reward_model = modules.RewardModel(
     input_dim=args.embedding_dim,
     hidden_dim=args.hidden_dim,
     action_dim=args.action_dim,
@@ -204,9 +206,17 @@ reward_model = modules.TransitionGNN(
     copy_action=args.copy_action,
     use_interactions=args.use_interactions == 'True',
     edge_actions=args.edge_actions == 'True',
-    output_dim=1,
 ).to(device)
 reward_model.apply(utils.weights_init)
+
+termination_model = modules.TerminationModel(
+    input_dim=args.embedding_dim,
+    hidden_dim=args.hidden_dim,
+    action_dim=args.action_dim,
+    num_objects=args.num_objects,
+    use_interactions=args.use_interactions == 'True',
+).to(device)
+termination_model.apply(utils.weights_init)
 
 interactions_transition = None
 interactions_reward = None
@@ -326,7 +336,7 @@ if args.decoder:
         decoder.parameters(),
         lr=args.learning_rate)
 
-parameters = list(model.parameters()) + list(reward_model.parameters())
+parameters = list(model.parameters()) + list(reward_model.parameters()) + list(termination_model.parameters())
 if attention is not None:
     parameters += list(attention.parameters())
 for interactions in (interactions_transition, interactions_reward):
@@ -445,10 +455,24 @@ for epoch in range(1, args.epochs + 1):
             loss_contrastive, metrics = model.contrastive_loss(obs, action, next_obs, moving_boxes)
             loss += loss_contrastive
 
-            reward_prediction = reward_model([embedding, action, moving_boxes_reward, False])[0].squeeze(dim=-1).sum(-1)
+            reward_prediction = reward_model([embedding, action, moving_boxes_reward, False])
             reward_loss = args.reward_loss_coef * F.mse_loss(reward_prediction, rewards.to(torch.float32))
             metrics['reward_loss'] = reward_loss.item()
             loss += reward_loss
+
+            if args.termination_loss_coef > 0:
+                batch_size = data_batch[0].size(0)
+                termination_logit = termination_model([
+                    model.obj_encoder(model.obj_extractor(data_batch[0])),
+                    data_batch[1],
+                    torch.ones(batch_size, args.num_objects, dtype=torch.float32, device=obs.device),
+                    False
+                ])
+                termination_loss = args.termination_loss_coef * F.binary_cross_entropy_with_logits(
+                    termination_logit, data_batch[6].to(torch.float32)
+                )
+                metrics['termination_loss'] = termination_loss.item()
+                loss += termination_loss
 
             for key, value in metrics.items():
                 epoch_metrics[key] += value * obs.size(0)
@@ -473,7 +497,7 @@ for epoch in range(1, args.epochs + 1):
 
     epoch_metrics['reconstruction_loss'] /= k
     avg_loss = epoch_metrics['reconstruction_loss']
-    for loss_name in ('transition_loss', 'contrastive_loss', 'reward_loss'):
+    for loss_name in ('transition_loss', 'contrastive_loss', 'reward_loss', 'termination_loss'):
         epoch_metrics[loss_name] /= n
         avg_loss += epoch_metrics[loss_name]
 
@@ -489,6 +513,7 @@ for epoch in range(1, args.epochs + 1):
         best_loss = avg_loss
         torch.save(model.state_dict(), model_file)
         torch.save(reward_model.state_dict(), reward_model_file)
+        torch.save(termination_model.state_dict(), termination_model_file)
         if attention is not None:
             torch.save(attention.state_dict(), attention_file)
         if decoder is not None:
