@@ -145,7 +145,7 @@ def unsorted_segment_sum(tensor, segment_ids, num_segments):
 class StateTransitionsDataset(data.Dataset):
     """Create dataset of (o_t, a_t, o_{t+1}) transitions from replay buffer."""
 
-    def __init__(self, hdf5_file, hdf5_file_auxiliary=None, gamma=1):
+    def __init__(self, hdf5_file, hdf5_files_auxiliary=(), gamma=1):
         """
         Args:
             hdf5_file (string): Path to the hdf5 file that contains experience
@@ -164,7 +164,7 @@ class StateTransitionsDataset(data.Dataset):
             assert len(episode_actions_shape) == 2, f'Expected flatten actions, actual action shape: {episode_actions_shape[1:]}'
             self.action_dim = self.experience_buffer[0]['action'].shape[1]
 
-        if hdf5_file_auxiliary is not None:
+        for hdf5_file_auxiliary in hdf5_files_auxiliary:
             experience_buffer_states, use_rle_states, image_shape_states = load_list_dict_h5py(hdf5_file_auxiliary)
             n_boxes_states = -1
             if 'moving_boxes' in experience_buffer_states[0]:
