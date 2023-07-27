@@ -292,7 +292,10 @@ class ObjectMaskWrapper(gym.Wrapper):
         return mask[..., np.newaxis]
 
     def _resize(self, image):
-        cv2.resize(image, dst=image, dsize=self._shape, interpolation=cv2.INTER_AREA)
+        image = cv2.resize(image, dsize=self._shape, interpolation=cv2.INTER_AREA)
+        if len(image.shape) == 2:
+            image = image[..., np.newaxis]
+
         return image
 
     @staticmethod
