@@ -4,6 +4,7 @@ Running this script directly executes the random agent in environment and stores
 experience in a replay buffer.
 """
 import collections
+import random
 # Get env directory
 import sys
 from pathlib import Path
@@ -93,6 +94,7 @@ if __name__ == '__main__':
     else:
         raise ValueError(f'Unknown environment: type={args.env_type} env_id={args.env_id}')
 
+    random.seed(args.seed)
     np.random.seed(args.seed)
     env.action_space.seed(args.seed)
 
