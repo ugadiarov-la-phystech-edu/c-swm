@@ -300,7 +300,11 @@ class ObjectMaskWrapper(gym.Wrapper):
 
     @staticmethod
     def _normalize(image, amplitude):
-        return (image / image.max() * amplitude).astype(np.uint8)
+        value_max = image.max()
+        if value_max == 0:
+            return image
+
+        return (image * (amplitude / value_max)).astype(np.uint8)
 
     def _process_image(self, image):
         hls = cv2.cvtColor(image.astype(np.float32) / 255., cv2.COLOR_RGB2HLS)
